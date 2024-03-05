@@ -1,10 +1,152 @@
 #include <vsg/all.h>
+#include <vsgXchange/all.h>
 
+#include <cmath>
+#include <cstdlib>
+#include <fstream>
 #include <iostream>
+#include <string>
+#include <vector>
+
+template <typename T>
+struct vec3
+{
+    T x;
+    T y;
+    T z;
+};
+
+using vec3ld = vec3<long double>;
+using vec3u = vec3<unsigned int>;
+
+struct Mesh
+{
+    std::vector<vec3ld> vertices;
+    std::vector<vec3ld> normals;
+    std::vector<vec3ld> texcoords;
+    std::vector<vec3u> faces;
+    std::vector<vec3u> texfaces;
+};
 
 int main(int argc, char* argv[])
 {
+    auto options = vsg::Options::create();
+    options->add(vsgXchange::all::create());
+
     auto windowTraits = vsg::WindowTraits::create();
+    windowTraits->windowTitle = ".dmd viewer";
+
+    vsg::CommandLine arguments(&argc, argv);
+    if (arguments.errors())
+    {
+        return arguments.writeErrorMessages(std::cerr);
+    }
+
+    auto scene = vsg::Group::create();
+    std::vector<Mesh> meshes;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        vsg::Path filename = arguments[i];
+        std::ifstream input_file(filename.string());
+
+        if (!input_file)
+        {
+            std::cerr << "Failed to open \"" << filename << "\" for reading!\n";
+            return EXIT_FAILURE;
+        }
+
+        Mesh* current_mesh = nullptr;
+        int numverts = 0;
+        int numfaces = 0;
+        int numtverts = 0;
+        int numtvfaces = 0;
+
+        std::string input_string;
+        while (std::getline(input_file, input_string))
+        {
+            // Remove CR symbol at the end of string
+            input_string = input_string.substr(0, input_string.length() - 1);
+
+            if (input_string == "New object")
+            {
+                current_mesh = &meshes.emplace_back(Mesh());
+            }
+            else if (input_string == "numverts numfaces")
+            {
+                input_file >> numverts >> numfaces;
+            }
+            else if (input_string == "Mesh vertices:")
+            {
+                for (int i = 0; i < numverts; ++i)
+                {
+                    vec3ld vertex;
+                    input_file >> vertex.x;
+                    input_file >> vertex.y;
+                    input_file >> vertex.z;
+                    (*current_mesh).vertices.emplace_back(vertex);
+                }
+            }
+            else if (input_string == "Mesh faces:")
+            {
+                for (int i = 0; i < numfaces; ++i)
+                {
+                    vec3u face;
+                    input_file >> face.x;
+                    input_file >> face.y;
+                    input_file >> face.z;
+                    (*current_mesh).faces.emplace_back(face);
+                }
+            }
+            else if (input_string == "numtverts numtvfaces")
+            {
+                input_file >> numtverts >> numtvfaces;
+            }
+            else if (input_string == "Texture vertices:")
+            {
+                for (int i = 0; i < numtverts; ++i)
+                {
+                    vec3ld texcoord;
+                    input_file >> texcoord.x;
+                    input_file >> texcoord.y;
+                    input_file >> texcoord.z;
+                    (*current_mesh).texcoords.emplace_back(texcoord);
+                }
+            }
+            else if (input_string == "Texture faces:")
+            {
+                for (int i = 0; i < numtvfaces; ++i)
+                {
+                    vec3u texface;
+                    input_file >> texface.x;
+                    input_file >> texface.y;
+                    input_file >> texface.z;
+                    (*current_mesh).texfaces.emplace_back(texface);
+                }
+            }
+        }
+
+        for (int i = 0; i < numfaces; ++i)
+        {
+            auto& face = (*current_mesh).faces[i];
+            auto& v1 = (*current_mesh).vertices[face.x];
+            auto& v2 = (*current_mesh).vertices[face.y];
+            auto& v3 = (*current_mesh).vertices[face.z];
+            vec3ld a { v2.x - v1.x, v2.y - v1.y, v2.z - v1.z };
+            vec3ld b { v3.x - v1.x, v3.y - v1.y, v3.z - v1.z };
+            auto x = a.y * b.z - a.z * b.y;
+            auto y = a.z * b.x - a.x * b.z;
+            auto z = a.x * b.y - a.y * b.x;
+            auto length = std::sqrt(x * x + y * y + z * z);
+            x /= length;
+            y /= length;
+            z /= length;
+            vec3ld normal { x, y, z };
+            (*current_mesh).normals.emplace_back(normal);
+        }
+
+        std::cout << '\n';
+    }
 
     vsg::ref_ptr<vsg::ShaderSet> shaderSet = vsg::createPhongShaderSet(vsg::Options::create());
 
@@ -13,10 +155,6 @@ int main(int argc, char* argv[])
         std::cout << "Could not create shaders." << std::endl;
         return 1;
     }
-
-    vsg::dvec3 position     { 0.0, 0.0, 0.0 };
-    vsg::dvec3 delta_column { 2.0, 0.0, 0.0 };
-    vsg::dvec3 delta_row    { 0.0, 2.0, 0.0 };
 
     auto scenegraph = vsg::Group::create();
 
@@ -61,14 +199,14 @@ int main(int argc, char* argv[])
     //      {0.0f, 1.0f}});
 
     auto colors = vsg::vec4Array::create(
-        {{0.0f, 0.0f, 0.0f, 1.0f},
+        {{1.0f, 1.0f, 1.0f, 1.0f},
          {0.0f, 0.0f, 1.0f, 1.0f},
          {0.0f, 1.0f, 0.0f, 1.0f},
          {0.0f, 1.0f, 1.0f, 1.0f},
          {1.0f, 0.0f, 0.0f, 1.0f},
          {1.0f, 0.0f, 1.0f, 1.0f},
          {1.0f, 1.0f, 0.0f, 1.0f},
-         {1.0f, 1.0f, 1.0f, 1.0f}});
+         {0.0f, 1.0f, 1.0f, 1.0f}});
 
     auto indices = vsg::ushortArray::create({
         // Top
@@ -167,6 +305,6 @@ int main(int argc, char* argv[])
     }
 
     // clean up done automatically thanks to ref_ptr<>
-    return 0;
+    return EXIT_SUCCESS;
 }
 
