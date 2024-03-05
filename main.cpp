@@ -2,11 +2,18 @@
 #include <vsgXchange/all.h>
 
 #include <cmath>
+#include <cstddef>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
+
+template <typename T>
+bool is_zero(T num)
+{
+    return std::abs(num) < 0.000001;
+}
 
 template <typename T>
 struct vec3
@@ -81,9 +88,17 @@ int main(int argc, char* argv[])
                 for (int i = 0; i < numverts; ++i)
                 {
                     vec3ld vertex;
-                    input_file >> vertex.x;
-                    input_file >> vertex.y;
-                    input_file >> vertex.z;
+                    input_file >> vertex.x >> vertex.y >> vertex.z;
+
+                    // auto length = std::sqrt(vertex.x * vertex.x + vertex.y * vertex.y + vertex.z * vertex.z);
+
+                    // if (!is_zero(length))
+                    // {
+                    //     vertex.x /= length;
+                    //     vertex.y /= length;
+                    //     vertex.z /= length;
+                    // }
+
                     (*current_mesh).vertices.emplace_back(vertex);
                 }
             }
@@ -92,9 +107,7 @@ int main(int argc, char* argv[])
                 for (int i = 0; i < numfaces; ++i)
                 {
                     vec3u face;
-                    input_file >> face.x;
-                    input_file >> face.y;
-                    input_file >> face.z;
+                    input_file >> face.x >> face.y >> face.z;
                     (*current_mesh).faces.emplace_back(face);
                 }
             }
@@ -107,9 +120,7 @@ int main(int argc, char* argv[])
                 for (int i = 0; i < numtverts; ++i)
                 {
                     vec3ld texcoord;
-                    input_file >> texcoord.x;
-                    input_file >> texcoord.y;
-                    input_file >> texcoord.z;
+                    input_file >> texcoord.x >> texcoord.y >> texcoord.z;
                     (*current_mesh).texcoords.emplace_back(texcoord);
                 }
             }
@@ -138,9 +149,14 @@ int main(int argc, char* argv[])
             auto y = a.z * b.x - a.x * b.z;
             auto z = a.x * b.y - a.y * b.x;
             auto length = std::sqrt(x * x + y * y + z * z);
-            x /= length;
-            y /= length;
-            z /= length;
+
+            if (!is_zero(length))
+            {
+                x /= length;
+                y /= length;
+                z /= length;
+            }
+
             vec3ld normal { x, y, z };
             (*current_mesh).normals.emplace_back(normal);
         }
@@ -167,26 +183,69 @@ int main(int argc, char* argv[])
 
     graphicsPipelineConfig->assignDescriptor("material", mat);
 
-    // set up vertex and index arrays
-    auto vertices = vsg::vec3Array::create(
-        {{-0.5f, -0.5f, -0.5f},
-         {-0.5f, -0.5f,  0.5f},
-         {-0.5f,  0.5f, -0.5f},
-         {-0.5f,  0.5f,  0.5f},
-         { 0.5f, -0.5f, -0.5f},
-         { 0.5f, -0.5f,  0.5f},
-         { 0.5f,  0.5f, -0.5f},
-         { 0.5f,  0.5f,  0.5f}});
+    auto& mesh = meshes[0];
+    auto vertices_count = mesh.vertices.size();
+    auto normals_count = mesh.normals.size();
+    auto faces_count = mesh.faces.size();
 
-    auto normals = vsg::vec3Array::create(
-        {{-1.0f, -1.0f, -1.0f},
-         {-1.0f, -1.0f,  1.0f},
-         {-1.0f,  1.0f, -1.0f},
-         {-1.0f,  1.0f,  1.0f},
-         { 1.0f, -1.0f, -1.0f},
-         { 1.0f, -1.0f,  1.0f},
-         { 1.0f,  1.0f, -1.0f},
-         { 1.0f,  1.0f,  1.0f}});
+    auto vertices = vsg::vec3Array::create(vertices_count);
+    std::cout << "Vertices (" << vertices_count << "):\n";
+    for (std::size_t i = 0; i < vertices_count; ++i)
+    {
+        auto& vertex = mesh.vertices.at(i);
+        vertices->at(i).set(vertex.x, vertex.y, vertex.z);
+        std::cout << vertices->at(i).x << ' ' << vertices->at(i).y << ' ' << vertices->at(i).z << '\n';
+    }
+    std::cout << '\n';
+
+    auto normals = vsg::vec3Array::create(normals_count);
+    std::cout << "Normals (" << normals_count << "):\n";
+    for (std::size_t i = 0; i < normals_count; ++i)
+    {
+        auto& normal = mesh.normals.at(i);
+        normals->at(i).set(normal.x, normal.y, normal.z);
+        std::cout << normals->at(i).x << ' ' << normals->at(i).y << ' ' << normals->at(i).z << '\n';
+    }
+    std::cout << '\n';
+
+    auto indices = vsg::ushortArray::create(faces_count * 3);
+    std::cout << "Indices (" << faces_count * 3 << "):\n";
+    for (std::size_t i = 0; i < faces_count; ++i)
+    {
+        auto& face = mesh.faces.at(i);
+        indices->at(i * 3) = face.x;
+        indices->at(i * 3 + 1) = face.y;
+        indices->at(i * 3 + 2) = face.z;
+        std::cout << indices->at(i * 3) << ' ' << indices->at(i * 3 + 1) << ' ' << indices->at(i * 3 + 2) << '\n';
+    }
+    std::cout << '\n';
+
+    auto colors = vsg::vec4Array::create(vertices_count);
+    for (std::size_t i = 0; i < vertices_count; ++i)
+    {
+        colors->at(i).set(1.0f, 1.0f, 1.0f, 1.0f);
+    }
+
+    // set up vertex and index arrays
+    // auto vertices = vsg::vec3Array::create(
+    //     {{-0.5f, -0.5f, -0.5f},
+    //      {-0.5f, -0.5f,  0.5f},
+    //      {-0.5f,  0.5f, -0.5f},
+    //      {-0.5f,  0.5f,  0.5f},
+    //      { 0.5f, -0.5f, -0.5f},
+    //      { 0.5f, -0.5f,  0.5f},
+    //      { 0.5f,  0.5f, -0.5f},
+    //      { 0.5f,  0.5f,  0.5f}});
+
+    // auto normals = vsg::vec3Array::create(
+    //     {{-1.0f, -1.0f, -1.0f},
+    //      {-1.0f, -1.0f,  1.0f},
+    //      {-1.0f,  1.0f, -1.0f},
+    //      {-1.0f,  1.0f,  1.0f},
+    //      { 1.0f, -1.0f, -1.0f},
+    //      { 1.0f, -1.0f,  1.0f},
+    //      { 1.0f,  1.0f, -1.0f},
+    //      { 1.0f,  1.0f,  1.0f}});
 
     // auto texcoords = vsg::vec2Array::create(
     //     {{0.0f, 0.0f},
@@ -198,41 +257,41 @@ int main(int argc, char* argv[])
     //      {1.0f, 1.0f},
     //      {0.0f, 1.0f}});
 
-    auto colors = vsg::vec4Array::create(
-        {{1.0f, 1.0f, 1.0f, 1.0f},
-         {0.0f, 0.0f, 1.0f, 1.0f},
-         {0.0f, 1.0f, 0.0f, 1.0f},
-         {0.0f, 1.0f, 1.0f, 1.0f},
-         {1.0f, 0.0f, 0.0f, 1.0f},
-         {1.0f, 0.0f, 1.0f, 1.0f},
-         {1.0f, 1.0f, 0.0f, 1.0f},
-         {0.0f, 1.0f, 1.0f, 1.0f}});
+    // auto colors = vsg::vec4Array::create(
+    //     {{1.0f, 1.0f, 1.0f, 1.0f},
+    //      {0.0f, 0.0f, 1.0f, 1.0f},
+    //      {0.0f, 1.0f, 0.0f, 1.0f},
+    //      {0.0f, 1.0f, 1.0f, 1.0f},
+    //      {1.0f, 0.0f, 0.0f, 1.0f},
+    //      {1.0f, 0.0f, 1.0f, 1.0f},
+    //      {1.0f, 1.0f, 0.0f, 1.0f},
+    //      {0.0f, 1.0f, 1.0f, 1.0f}});
 
-    auto indices = vsg::ushortArray::create({
-        // Top
-        1, 5, 3,
-        3, 5, 7,
+    // auto indices = vsg::ushortArray::create({
+    //     // Top
+    //     1, 5, 3,
+    //     3, 5, 7,
 
-        // Bottom
-        0, 2, 4,
-        4, 2, 6,
+    //     // Bottom
+    //     0, 2, 4,
+    //     4, 2, 6,
 
-        // Left
-        0, 1, 2,
-        2, 1, 3,
+    //     // Left
+    //     0, 1, 2,
+    //     2, 1, 3,
 
-        // Front
-        0, 4, 1,
-        1, 4, 5,
+    //     // Front
+    //     0, 4, 1,
+    //     1, 4, 5,
 
-        // Back
-        2, 3, 6,
-        6, 3, 7,
+    //     // Back
+    //     2, 3, 6,
+    //     6, 3, 7,
 
-        // Right
-        4, 6, 5,
-        5, 6, 7
-    });
+    //     // Right
+    //     4, 6, 5,
+    //     5, 6, 7
+    // });
 
     vsg::DataList vertexArrays;
 
@@ -244,7 +303,7 @@ int main(int argc, char* argv[])
     auto drawCommands = vsg::Commands::create();
     drawCommands->addChild(vsg::BindVertexBuffers::create(graphicsPipelineConfig->baseAttributeBinding, vertexArrays));
     drawCommands->addChild(vsg::BindIndexBuffer::create(indices));
-    drawCommands->addChild(vsg::DrawIndexed::create(36, 1, 0, 0, 0));
+    drawCommands->addChild(vsg::DrawIndexed::create(faces_count * 3, 1, 0, 0, 0));
 
     graphicsPipelineConfig->init();
 
