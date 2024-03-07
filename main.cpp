@@ -87,6 +87,7 @@ int main(int argc, char* argv[])
             else if (input_string == "Mesh vertices:")
             {
                 current_mesh->vertices = vsg::vec3Array::create(numverts);
+                current_mesh->normals = vsg::vec3Array::create(numverts);
                 for (std::size_t i = 0; i < numverts; ++i)
                 {
                     auto& vertex = current_mesh->vertices->at(i);
@@ -95,7 +96,6 @@ int main(int argc, char* argv[])
             }
             else if (input_string == "Mesh faces:")
             {
-                current_mesh->normals = vsg::vec3Array::create(numfaces);
                 current_mesh->indices = vsg::ushortArray::create(numfaces * 3);
                 for (std::size_t i = 0; i < numfaces * 3; ++i)
                 {
@@ -131,28 +131,39 @@ int main(int argc, char* argv[])
             auto& vertices = mesh.vertices;
             auto& indices = mesh.indices;
 
-            auto& v1 = vertices->at(indices->at(i * 3));
-            auto& v2 = vertices->at(indices->at(i * 3 + 1));
-            auto& v3 = vertices->at(indices->at(i * 3 + 2));
+            auto index1 = indices->at(i * 3);
+            auto index2 = indices->at(i * 3 + 1);
+            auto index3 = indices->at(i * 3 + 2);
+
+            auto& v1 = vertices->at(index1 - 1);
+            auto& v2 = vertices->at(index2 - 1);
+            auto& v3 = vertices->at(index3 - 1);
+
             vec3f a { v2.x - v1.x, v2.y - v1.y, v2.z - v1.z };
             vec3f b { v3.x - v1.x, v3.y - v1.y, v3.z - v1.z };
+
             auto x = a.y * b.z - a.z * b.y;
             auto y = a.z * b.x - a.x * b.z;
             auto z = a.x * b.y - a.y * b.x;
-            auto length = std::sqrt(x * x + y * y + z * z);
 
-            if (!is_zero(length))
-            {
-                x /= length;
-                y /= length;
-                z /= length;
-            }
+            auto& normal1 = mesh.normals->at(index1 - 1);
+            auto& normal2 = mesh.normals->at(index2 - 1);
+            auto& normal3 = mesh.normals->at(index3 - 1);
 
-            mesh.normals->at(i).set(x, y, z);
+            normal1.x += x;
+            normal1.y += y;
+            normal1.z += z;
+            normal2.x += x;
+            normal2.y += y;
+            normal2.z += z;
+            normal3.x += x;
+            normal3.y += y;
+            normal3.z += z;
         }
 
         std::cout << '\n';
     }
+
 
     vsg::ref_ptr<vsg::ShaderSet> shaderSet = vsg::createPhongShaderSet(vsg::Options::create());
 
@@ -239,16 +250,6 @@ int main(int argc, char* argv[])
 
     std::cout << "centre = " << centre << std::endl;
     std::cout << "radius = " << radius << std::endl;
-
-    if (std::abs(centre.x) > 1)
-    {
-        int vertices_count = mesh.vertices->size();
-        std::cout << "Mesh vertices (" << vertices_count << "):\n";
-        for (std::size_t i = 0; i < vertices_count; ++i)
-        {
-            // std::cout
-        }
-    }
 
     // camera related details
     double nearFarRatio = 0.001;
