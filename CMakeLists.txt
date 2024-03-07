@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(test_vsg LANGUAGES CXX)
+project(test_vsg)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -9,7 +9,7 @@ find_package(vsgXchange REQUIRED)
 
 add_executable(test_vsg main.cpp)
 
-target_link_libraries(test_vsg vsg::vsg vsgXchange::vsgXchange)
+target_link_libraries(test_vsg PRIVATE vsg::vsg vsgXchange::vsgXchange)
 
 include(GNUInstallDirs)
 install(TARGETS test_vsg

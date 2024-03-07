@@ -28,12 +28,10 @@ using vec3u = vec3<unsigned int>;
 
 struct Mesh
 {
-    vsg::ref_ptr<vsg::vec3Array> vertices;
-    vsg::ref_ptr<vsg::vec3Array> normals;
+    vsg::ref_ptr<vsg::vec3Array>   vertices;
+    vsg::ref_ptr<vsg::vec3Array>   normals;
     vsg::ref_ptr<vsg::ushortArray> indices;
-
-    vsg::ref_ptr<vsg::vec3Array> texcoords;
-    vsg::ref_ptr<vsg::ushortArray> texindices;
+    vsg::ref_ptr<vsg::vec3Array>   texcoords;
 };
 
 int main(int argc, char* argv[])
@@ -65,10 +63,13 @@ int main(int argc, char* argv[])
         }
 
         Mesh* current_mesh = nullptr;
+
+        vsg::ref_ptr<vsg::vec3Array> temp_vertices;
+        std::vector<unsigned int> temp_indices;
+
         int numverts = 0;
         int numfaces = 0;
         int numtverts = 0;
-        int numtvfaces = 0;
 
         std::string input_string;
         while (std::getline(input_file, input_string))
@@ -86,29 +87,33 @@ int main(int argc, char* argv[])
             }
             else if (input_string == "Mesh vertices:")
             {
-                current_mesh->vertices = vsg::vec3Array::create(numverts);
-                current_mesh->normals = vsg::vec3Array::create(numverts);
+                temp_vertices = vsg::vec3Array::create(numverts);
                 for (std::size_t i = 0; i < numverts; ++i)
                 {
-                    auto& vertex = current_mesh->vertices->at(i);
+                    auto& vertex = temp_vertices->at(i);
                     input_file >> vertex.x >> vertex.y >> vertex.z;
                 }
             }
             else if (input_string == "Mesh faces:")
             {
-                current_mesh->indices = vsg::ushortArray::create(numfaces * 3);
                 for (std::size_t i = 0; i < numfaces * 3; ++i)
                 {
-                    input_file >> current_mesh->indices->at(i);
+                    unsigned int index;
+                    input_file >> index;
+                    temp_indices.emplace_back(index);
                 }
             }
             else if (input_string == "numtverts numtvfaces")
             {
-                input_file >> numtverts >> numtvfaces;
+                input_file >> numtverts >> numfaces;
+
+                current_mesh->vertices = vsg::vec3Array::create(numtverts);
+                current_mesh->normals = vsg::vec3Array::create(numtverts);
+                current_mesh->indices = vsg::ushortArray::create(numfaces * 3);
+                current_mesh->texcoords = vsg::vec3Array::create(numtverts);
             }
             else if (input_string == "Texture vertices:")
             {
-                current_mesh->texcoords = vsg::vec3Array::create(numtverts);
                 for (std::size_t i = 0; i < numtverts; ++i)
                 {
                     auto& texcoord = current_mesh->texcoords->at(i);
@@ -117,12 +122,20 @@ int main(int argc, char* argv[])
             }
             else if (input_string == "Texture faces:")
             {
-                current_mesh->texindices = vsg::ushortArray::create(numtvfaces * 3);
-                for (std::size_t i = 0; i < numtvfaces * 3; ++i)
+                current_mesh->indices = vsg::ushortArray::create(numfaces * 3);
+                for (std::size_t i = 0; i < numfaces * 3; ++i)
                 {
-                    input_file >> current_mesh->texindices->at(i);
+                    input_file >> current_mesh->indices->at(i);
                 }
             }
+        }
+
+        auto indices_count = (*current_mesh).indices->size();
+        for (std::size_t i = 0; i < indices_count; ++i)
+        {
+            auto& mesh = *current_mesh;
+
+            current_mesh->vertices->at(mesh.indices->at(i) - 1) = temp_vertices->at(temp_indices.at(i) - 1);
         }
 
         for (std::size_t i = 0; i < numfaces; ++i)
@@ -177,7 +190,7 @@ int main(int argc, char* argv[])
 
     auto graphicsPipelineConfig = vsg::GraphicsPipelineConfigurator::create(shaderSet);
 
-    vsg::Path texture_path("../textures/vokzal_tuapse.bmp");
+    vsg::Path texture_path("../textures/vokzal_tuapse2.bmp");
     if (texture_path)
     {
         auto texture_data = vsg::read_cast<vsg::Data>(texture_path, options);
@@ -190,7 +203,7 @@ int main(int argc, char* argv[])
         //----------------------------------------------------------------------
         // Uncomment to see texture
         //----------------------------------------------------------------------
-        // graphicsPipelineConfig->assignTexture("diffuseMap", texture_data);
+        graphicsPipelineConfig->assignTexture("diffuseMap", texture_data);
     }
 
     // set up passing of material
