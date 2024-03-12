@@ -8,8 +8,13 @@ find_package(vsg REQUIRED)
 find_package(vsgXchange REQUIRED)
 
 add_executable(test_vsg src/main.cpp
+    include/io.h
     include/Mesh.h
-    src/Mesh.cpp
+    include/Model.h
+    include/vsg_Instance.h
+
+    src/Model.cpp
+    src/vsg_Instance.cpp
 )
 
 target_include_directories(test_vsg PRIVATE include)

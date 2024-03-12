@@ -3,18 +3,14 @@
 
 #include <vsg/core/Array.h>
 #include <vsg/core/ref_ptr.h>
-#include <vsg/io/Path.h>
 
-class Mesh
+struct Mesh
 {
-public:
-    static Mesh loadDmd(const vsg::Path& path);
-
-private:
-    vsg::ref_ptr<vsg::vec3Array> vertices_;
-    vsg::ref_ptr<vsg::vec3Array> normals_;
-    vsg::ref_ptr<vsg::vec3Array> texCoords_;
-    vsg::ref_ptr<vsg::ushortArray> indices_;
+    vsg::ref_ptr<vsg::vec3Array> vertices;
+    vsg::ref_ptr<vsg::vec3Array> normals;
+    vsg::ref_ptr<vsg::vec3Array> texCoords;
+    vsg::ref_ptr<vsg::vec4Array> colors;
+    vsg::ref_ptr<vsg::ushortArray> indices;
 };
 
 #endif // ANI_MESH_H
