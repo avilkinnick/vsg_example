@@ -7,8 +7,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(vsg REQUIRED)
 find_package(vsgXchange REQUIRED)
 
-add_executable(test_vsg main.cpp)
+add_executable(test_vsg src/main.cpp
+    include/Mesh.h
+    src/Mesh.cpp
+)
 
+target_include_directories(test_vsg PRIVATE include)
 target_link_libraries(test_vsg PRIVATE vsg::vsg vsgXchange::vsgXchange)
 
 include(GNUInstallDirs)
