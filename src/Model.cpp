@@ -6,9 +6,21 @@
 #include <iostream>
 #include <set>
 
+
+#include <vsg/all.h>
+#include <vsgXchange/all.h>
+
+
 Model Model::loadDmd(const vsg::Path& path)
 {
     Model model;
+
+    auto options = vsg::Options::create();
+    options->paths = vsg::getEnvPaths("VSG_FILE_PATH");
+    options->add(vsgXchange::all::create());
+
+    auto file2 = vsg::read(path, options);
+    std::string test;
 
     std::ifstream file(path.c_str());
     if (!file)
