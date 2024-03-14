@@ -13,7 +13,7 @@ int main(int argc, char* argv[])
     vsg_Instance vsg_instance(&argc, argv);
 
     // Загрузить модель
-    auto model = Model::loadDmd(vsg_instance.arguments[1]);
+    auto model = Model::loadDmd(vsg_instance.arguments[1], vsg_instance.options);
     auto& mesh = model.meshes()[0];
 
     // Загрузить текстуру

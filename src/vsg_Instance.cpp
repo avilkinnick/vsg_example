@@ -6,6 +6,7 @@ vsg_Instance::vsg_Instance(int* argc, char** argv)
     : arguments(argc, argv)
 {
     options = vsg::Options::create();
+    options->paths = vsg::getEnvPaths("VSG_FILE_PATH");
     options->add(vsgXchange::all::create());
 
     windowTraits = vsg::WindowTraits::create();

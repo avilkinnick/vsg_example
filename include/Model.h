@@ -10,7 +10,7 @@
 class Model
 {
 public:
-    static Model loadDmd(const vsg::Path& path);
+    static Model loadDmd(const vsg::Path& path, vsg::ref_ptr<const vsg::Options> options);
 
     const std::vector<Mesh>& meshes() const { return meshes_; }
 

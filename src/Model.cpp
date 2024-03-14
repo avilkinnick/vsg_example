@@ -2,33 +2,29 @@
 
 #include "io.h"
 
-#include <fstream>
 #include <iostream>
-#include <set>
-
+#include <sstream>
 
 #include <vsg/all.h>
 #include <vsgXchange/all.h>
 
 
-Model Model::loadDmd(const vsg::Path& path)
+Model Model::loadDmd(const vsg::Path& path, vsg::ref_ptr<const vsg::Options> options)
 {
     Model model;
 
-    auto options = vsg::Options::create();
-    options->paths = vsg::getEnvPaths("VSG_FILE_PATH");
-    options->add(vsgXchange::all::create());
+    auto reader = vsg::txt::create();
+    reader->supportedExtensions.insert(".dmd");
 
-    auto file2 = vsg::read(path, options);
-    std::string test;
-
-    std::ifstream file(path.c_str());
-    if (!file)
+    auto stringValue = reader->read_cast<vsg::stringValue>(path, options);
+    if (!stringValue)
     {
         std::cerr << "Failed to open \"" << path.c_str() << "\" for reading!\n";
     }
     else
     {
+        std::stringstream stream(stringValue->value());
+
         // Указатель на текущий меш
         Mesh* mesh = nullptr;
 
@@ -44,7 +40,7 @@ Model Model::loadDmd(const vsg::Path& path)
         std::size_t tempVerticesCount;
 
         std::string input;
-        while (std::getline(file, input))
+        while (std::getline(stream, input))
         {
             ani::remove_CR_symbols(input);
 
@@ -59,7 +55,7 @@ Model Model::loadDmd(const vsg::Path& path)
             }
             else if (input == "numverts numfaces")
             {
-                file >> tempVerticesCount >> facesCount;
+                stream >> tempVerticesCount >> facesCount;
                 indicesCount = facesCount * 3;
             }
             else if (input == "Mesh vertices:")
@@ -68,7 +64,7 @@ Model Model::loadDmd(const vsg::Path& path)
                 for (std::size_t i = 0; i < tempVerticesCount; ++i)
                 {
                     auto& vertex = tempVertices->at(i);
-                    file >> vertex.x >> vertex.y >> vertex.z;
+                    stream >> vertex.x >> vertex.y >> vertex.z;
                 }
             }
             else if (input == "Mesh faces:")
@@ -77,13 +73,13 @@ Model Model::loadDmd(const vsg::Path& path)
                 for (std::size_t i = 0; i < indicesCount; ++i)
                 {
                     std::size_t index;
-                    file >> index;
+                    stream >> index;
                     tempIndices->at(i) = index - 1;
                 }
             }
             else if (input == "numtverts numtvfaces")
             {
-                file >> verticesCount >> facesCount;
+                stream >> verticesCount >> facesCount;
             }
             else if (input == "Texture vertices:")
             {
@@ -92,7 +88,7 @@ Model Model::loadDmd(const vsg::Path& path)
                 for (std::size_t i = 0; i < verticesCount; ++i)
                 {
                     auto& texCoord = mesh->texCoords->at(i);
-                    file >> texCoord.x >> texCoord.y >> texCoord.z;
+                    stream >> texCoord.x >> texCoord.y >> texCoord.z;
 
                     mesh->colors->at(i).set(1.0f, 1.0f, 1.0f, 1.0f);
                 }
@@ -106,7 +102,7 @@ Model Model::loadDmd(const vsg::Path& path)
                 for (std::size_t i = 0; i < indicesCount; ++i)
                 {
                     std::size_t index;
-                    file >> index;
+                    stream >> index;
                     mesh->indices->at(i) = --index;
 
                     // Если вершина с заданным индексом еще не была обработана,
