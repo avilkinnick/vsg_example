@@ -2,12 +2,11 @@
 
 #include "io.h"
 
-#include <iostream>
-#include <sstream>
-
 #include <vsg/all.h>
 #include <vsgXchange/all.h>
 
+#include <iostream>
+#include <sstream>
 
 Model Model::loadDmd(const vsg::Path& path, vsg::ref_ptr<const vsg::Options> options)
 {
@@ -63,8 +62,7 @@ Model Model::loadDmd(const vsg::Path& path, vsg::ref_ptr<const vsg::Options> opt
                 tempVertices = vsg::vec3Array::create(tempVerticesCount);
                 for (std::size_t i = 0; i < tempVerticesCount; ++i)
                 {
-                    auto& vertex = tempVertices->at(i);
-                    stream >> vertex.x >> vertex.y >> vertex.z;
+                    stream >> tempVertices->at(i);
                 }
             }
             else if (input == "Mesh faces:")
@@ -87,8 +85,7 @@ Model Model::loadDmd(const vsg::Path& path, vsg::ref_ptr<const vsg::Options> opt
                 mesh->colors = vsg::vec4Array::create(verticesCount);
                 for (std::size_t i = 0; i < verticesCount; ++i)
                 {
-                    auto& texCoord = mesh->texCoords->at(i);
-                    stream >> texCoord.x >> texCoord.y >> texCoord.z;
+                    stream >> mesh->texCoords->at(i);
 
                     mesh->colors->at(i).set(1.0f, 1.0f, 1.0f, 1.0f);
                 }
@@ -133,20 +130,17 @@ Model Model::loadDmd(const vsg::Path& path, vsg::ref_ptr<const vsg::Options> opt
                     auto& n3 = mesh->normals->at(index3);
 
                     // Векторы a и b - 2 стороны полигона
-                    vsg::vec3 a(v2.x - v1.x, v2.y - v1.y, v2.z - v1.z);
-                    vsg::vec3 b(v3.x - v1.x, v3.y - v1.y, v3.z - v1.z);
+                    vsg::vec3 a = v2 - v1;
+                    vsg::vec3 b = v3 - v1;
 
-                    // Вектор {x, y, z} - это векторное произведение a и b,
-                    // он представляет нормаль поверхности
-                    auto x = a.y * b.z - a.z * b.y;
-                    auto y = a.z * b.x - a.x * b.z;
-                    auto z = a.x * b.y - a.y * b.x;
+                    // Вектор c - это нормальнь поверхности
+                    vsg::vec3 faceNormal = vsg::cross(a, b);
 
                     // Добавить к каждой нормали вершины нормаль поверхности,
                     // на которой она лежит
-                    n1.set(n1.x + x, n1.y + y, n1.z + z);
-                    n2.set(n2.x + x, n2.y + y, n2.z + z);
-                    n3.set(n3.x + x, n3.y + y, n3.z + z);
+                    n1 += faceNormal;
+                    n2 += faceNormal;
+                    n3 += faceNormal;
                 }
             }
         }
