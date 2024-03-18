@@ -3,19 +3,14 @@
 
 #include "Mesh.h"
 
-#include <vsg/io/Path.h>
+#include <vsg/core/Inherit.h>
 
 #include <vector>
 
-class Model
+struct Model : public vsg::Inherit<vsg::Object, Model>
 {
 public:
-    static Model loadDmd(const vsg::Path& path, vsg::ref_ptr<const vsg::Options> options);
-
-    const std::vector<Mesh>& meshes() const { return meshes_; }
-
-private:
-    std::vector<Mesh> meshes_;
+    std::vector<Mesh> meshes;
 };
 
 #endif // ANI_MODEL_H

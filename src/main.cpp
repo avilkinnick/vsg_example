@@ -1,4 +1,4 @@
-#include "Model.h"
+#include "DMD_Reader.h"
 #include "vsg_Instance.h"
 
 #include <vsg/all.h>
@@ -13,8 +13,8 @@ int main(int argc, char* argv[])
     vsg_Instance vsg_instance(&argc, argv);
 
     // Загрузить модель
-    auto model = Model::loadDmd(vsg_instance.arguments[1], vsg_instance.options);
-    auto& mesh = model.meshes()[0];
+    auto model = DMD_Reader().read(vsg_instance.arguments[1], vsg_instance.options);
+    auto& mesh = model->meshes[0];
 
     // Загрузить текстуру
     // ! ТЕКСТУРА ДОЛЖНА БЫТЬ ЗАРАНЕЕ ОТРАЖЕНА ПО ВЕРТИКАЛИ !
