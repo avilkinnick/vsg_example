@@ -36,7 +36,7 @@ int main(int argc, char* argv[])
     vsg::DataList vertexArrays;
     vsg_instance.graphicsPipelineConfig->assignArray(vertexArrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, mesh.vertices);
     vsg_instance.graphicsPipelineConfig->assignArray(vertexArrays, "vsg_Normal", VK_VERTEX_INPUT_RATE_VERTEX, mesh.normals);
-    vsg_instance.graphicsPipelineConfig->assignArray(vertexArrays, "vsg_TexCoord0", VK_VERTEX_INPUT_RATE_VERTEX, mesh.texCoords);
+    vsg_instance.graphicsPipelineConfig->assignArray(vertexArrays, "vsg_TexCoord0", VK_VERTEX_INPUT_RATE_VERTEX, mesh.tex_coords);
     vsg_instance.graphicsPipelineConfig->assignArray(vertexArrays, "vsg_Color", VK_VERTEX_INPUT_RATE_VERTEX, mesh.colors);
 
     vsg_instance.drawCommands->addChild(vsg::BindVertexBuffers::create(vsg_instance.graphicsPipelineConfig->baseAttributeBinding, vertexArrays));

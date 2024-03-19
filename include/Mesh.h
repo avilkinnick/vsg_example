@@ -8,7 +8,7 @@ struct Mesh
 {
     vsg::ref_ptr<vsg::vec3Array> vertices;
     vsg::ref_ptr<vsg::vec3Array> normals;
-    vsg::ref_ptr<vsg::vec3Array> texCoords;
+    vsg::ref_ptr<vsg::vec3Array> tex_coords;
     vsg::ref_ptr<vsg::vec4Array> colors;
     vsg::ref_ptr<vsg::ushortArray> indices;
 };

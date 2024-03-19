@@ -1,6 +1,11 @@
 #include "DMD_Reader.h"
 
+#include <vsg/core/Value.h>
+#include <vsg/maths/vec3.h>
+
 #include <iostream>
+#include <set>
+#include <string>
 
 DMD_Reader::DMD_Reader()
 {
@@ -18,7 +23,7 @@ vsg::ref_ptr<Model> DMD_Reader::read(const vsg::Path& path, vsg::ref_ptr<const v
 
     std::stringstream stream(stringValue->value());
 
-    model_ = Model::create();
+    m_model = Model::create();
 
     std::string input;
     while (std::getline(stream, input))
@@ -54,55 +59,11 @@ vsg::ref_ptr<Model> DMD_Reader::read(const vsg::Path& path, vsg::ref_ptr<const v
         }
         else if (input == "Texture faces:")
         {
-            std::set<std::size_t> processedIndices;
-            std::size_t indicesCount = currentMesh_->indices->size();
-
-            for (std::size_t i = 0; i < indicesCount; ++i)
-            {
-                std::size_t index;
-                stream >> index;
-                --index;
-                currentMesh_->indices->at(i) = index;
-
-                // Если вершина с заданным индексом еще не была обработана,
-                // привязать координаты этой вершины
-                // к текстурным координатам
-                if (processedIndices.find(index) == processedIndices.end())
-                {
-                    std::size_t tempIndex = tempIndices_->at(i);
-                    currentMesh_->vertices->at(index) = tempVertices_->at(tempIndex);
-                    processedIndices.insert(index);
-                }
-            }
-
-            // Посчитать нормали вершин
-            std::size_t facesCount = currentMesh_->indices->size() / 3;
-            for (std::size_t i = 0; i < facesCount; ++i)
-            {
-                auto index1 = currentMesh_->indices->at(i * 3);
-                auto index2 = currentMesh_->indices->at(i * 3 + 1);
-                auto index3 = currentMesh_->indices->at(i * 3 + 2);
-
-                auto& v1 = currentMesh_->vertices->at(index1);
-                auto& v2 = currentMesh_->vertices->at(index2);
-                auto& v3 = currentMesh_->vertices->at(index3);
-
-                auto& n1 = currentMesh_->normals->at(index1);
-                auto& n2 = currentMesh_->normals->at(index2);
-                auto& n3 = currentMesh_->normals->at(index3);
-
-                // Вектор c - это нормальнь поверхности
-                vsg::vec3 faceNormal = vsg::cross(v2 - v1, v3 - v1);
-
-                // Добавить к каждой нормали вершины нормаль поверхности,
-                // на которой она лежит
-                n1 += faceNormal;
-                n2 += faceNormal;
-                n3 += faceNormal;
-            }
+            read_and_proceed_texture_faces(stream);
+            calculate_vertex_normals();
         }
     }
-    return model_;
+    return m_model;
 }
 
 void DMD_Reader::remove_CR_symbols(std::string& str)
@@ -110,38 +71,48 @@ void DMD_Reader::remove_CR_symbols(std::string& str)
     while (true)
     {
         auto CR_pos = str.find('\r');
-        if (CR_pos == std::string::npos) break;
+        if (CR_pos == std::string::npos)
+        {
+            break;
+        }
         str.erase(CR_pos);
     }
 }
 
 void DMD_Reader::add_mesh()
 {
-    currentMesh_ = &(model_->meshes.emplace_back(Mesh()));
-    tempVertices_.reset();
-    tempIndices_.reset();
+    m_current_mesh = &(m_model->meshes.emplace_back(Mesh()));
+    m_temp_vertices.reset();
+    m_temp_indices.reset();
+    m_vertices_count = 0;
+    m_faces_count = 0;
+    m_indices_count = 0;
+    m_temp_vertices_count = 0;
 }
 
 void DMD_Reader::read_numverts_and_numfaces(std::stringstream& stream)
 {
-    stream >> tempVerticesCount_ >> facesCount_;
+    stream >> m_temp_vertices_count >> m_faces_count;
+    m_indices_count = m_faces_count * 3;
 }
 
 void DMD_Reader::init_temp_arrays()
 {
-    tempVertices_ = vsg::vec3Array::create(tempVerticesCount_);
-    tempIndices_ = vsg::ushortArray::create(facesCount_ * 3);
+    m_temp_vertices = vsg::vec3Array::create(m_temp_vertices_count);
+    m_temp_indices = vsg::ushortArray::create(m_indices_count);
 }
 
 void DMD_Reader::read_mesh_vertices(std::stringstream& stream)
 {
-    for (auto& tempVertex : *tempVertices_)
+    for (auto& tempVertex : *m_temp_vertices)
+    {
         stream >> tempVertex;
+    }
 }
 
 void DMD_Reader::read_mesh_faces(std::stringstream& stream)
 {
-    for (auto& tempIndex : *tempIndices_)
+    for (auto& tempIndex : *m_temp_indices)
     {
         stream >> tempIndex;
         --tempIndex;
@@ -150,21 +121,21 @@ void DMD_Reader::read_mesh_faces(std::stringstream& stream)
 
 void DMD_Reader::read_numtverts_and_numtvfaces(std::stringstream& stream)
 {
-    stream >> verticesCount_ >> facesCount_;
+    stream >> m_vertices_count >> m_faces_count;
 }
 
 void DMD_Reader::init_mesh_arrays()
 {
-    currentMesh_->vertices = vsg::vec3Array::create(verticesCount_);
-    currentMesh_->normals = vsg::vec3Array::create(verticesCount_);
-    currentMesh_->texCoords = vsg::vec3Array::create(verticesCount_);
-    currentMesh_->colors = vsg::vec4Array::create(verticesCount_);
-    currentMesh_->indices = vsg::ushortArray::create(facesCount_ * 3);
+    m_current_mesh->vertices = vsg::vec3Array::create(m_vertices_count);
+    m_current_mesh->normals = vsg::vec3Array::create(m_vertices_count);
+    m_current_mesh->tex_coords = vsg::vec3Array::create(m_vertices_count);
+    m_current_mesh->colors = vsg::vec4Array::create(m_vertices_count);
+    m_current_mesh->indices = vsg::ushortArray::create(m_indices_count);
 }
 
 void DMD_Reader::read_texture_vertices(std::stringstream& stream)
 {
-    for (auto& texCoord : *currentMesh_->texCoords)
+    for (auto& texCoord : *m_current_mesh->tex_coords)
     {
         stream >> texCoord;
     }
@@ -172,8 +143,55 @@ void DMD_Reader::read_texture_vertices(std::stringstream& stream)
 
 void DMD_Reader::set_default_color()
 {
-    for (auto& color : *currentMesh_->colors)
+    for (auto& color : *m_current_mesh->colors)
     {
         color.set(1.0f, 1.0f, 1.0f, 1.0f);
+    }
+}
+
+void DMD_Reader::read_and_proceed_texture_faces(std::stringstream& stream)
+{
+    std::set<std::size_t> processed_indices;
+    for (std::size_t i = 0; i < m_indices_count; ++i)
+    {
+        auto& index = m_current_mesh->indices->at(i);
+        stream >> index;
+        --index;
+
+        // Если вершина с заданным индексом еще не была обработана,
+        // привязать координаты этой вершины
+        // к текстурным координатам
+        if (processed_indices.find(index) == processed_indices.end())
+        {
+            std::size_t temp_index = m_temp_indices->at(i);
+            m_current_mesh->vertices->at(index) = m_temp_vertices->at(temp_index);
+            processed_indices.insert(index);
+        }
+    }
+}
+
+void DMD_Reader::calculate_vertex_normals()
+{
+    for (std::size_t i = 0; i < m_faces_count; ++i)
+    {
+        auto index1 = m_current_mesh->indices->at(i * 3);
+        auto index2 = m_current_mesh->indices->at(i * 3 + 1);
+        auto index3 = m_current_mesh->indices->at(i * 3 + 2);
+
+        auto& vertex1 = m_current_mesh->vertices->at(index1);
+        auto& vertex2 = m_current_mesh->vertices->at(index2);
+        auto& vertex3 = m_current_mesh->vertices->at(index3);
+
+        auto& vertex_normal1 = m_current_mesh->normals->at(index1);
+        auto& vertex_normal2 = m_current_mesh->normals->at(index2);
+        auto& vertex_normal3 = m_current_mesh->normals->at(index3);
+
+        vsg::vec3 face_normal = vsg::cross(vertex2 - vertex1, vertex3 - vertex1);
+
+        // Добавить к каждой нормали вершины нормаль поверхности,
+        // на которой она лежит
+        vertex_normal1 += face_normal;
+        vertex_normal2 += face_normal;
+        vertex_normal3 += face_normal;
     }
 }
