@@ -17,17 +17,6 @@ vsg_Instance::vsg_Instance(int* argc, char** argv)
         return;
     }
 
-    shaderSet = vsg::createPhongShaderSet(options);
-    if (!shaderSet)
-    {
-        std::cerr << "Failed to create shader set\n";
-        return;
-    }
-
-    graphicsPipelineConfig = vsg::GraphicsPipelineConfigurator::create(shaderSet);
-
-    drawCommands = vsg::Commands::create();
-    stateGroup = vsg::StateGroup::create();
     sceneGraph = vsg::Group::create();
 
     window = vsg::Window::create(windowTraits);
@@ -43,13 +32,6 @@ vsg_Instance::vsg_Instance(int* argc, char** argv)
 
 void vsg_Instance::run()
 {
-    graphicsPipelineConfig->init();
-
-    graphicsPipelineConfig->copyTo(stateGroup);
-    stateGroup->addChild(drawCommands);
-
-    sceneGraph->addChild(stateGroup);
-
     vsg::ComputeBounds computeBounds;
     sceneGraph->accept(computeBounds);
     vsg::dvec3 centre = (computeBounds.bounds.min + computeBounds.bounds.max) * 0.5;

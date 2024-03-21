@@ -1,29 +1,38 @@
 #include "DMD_Reader.h"
 
+#include <vsg/commands/BindVertexBuffers.h>
+#include <vsg/commands/BindIndexBuffer.h>
+#include <vsg/commands/DrawIndexed.h>
+#include <vsg/commands/Commands.h>
+#include <vsg/core/Data.h>
 #include <vsg/core/Value.h>
+#include <vsg/io/read.h>
 #include <vsg/maths/vec3.h>
+#include <vsg/utils/GraphicsPipelineConfigurator.h>
+#include <vsg/utils/ShaderSet.h>
 
 #include <iostream>
 #include <set>
-#include <string>
 
 DMD_Reader::DMD_Reader()
 {
     supportedExtensions.insert(".dmd");
 }
 
-vsg::ref_ptr<Model> DMD_Reader::read(const vsg::Path& path, vsg::ref_ptr<const vsg::Options> options)
+vsg::ref_ptr<vsg::StateGroup> DMD_Reader::read(
+    const vsg::Path& model_path,
+    const vsg::Path& texture_path,
+    vsg::ref_ptr<const vsg::Options> options
+)
 {
-    auto stringValue = read_cast<vsg::stringValue>(path, options);
-    if (!stringValue)
+    auto string_value = read_cast<vsg::stringValue>(model_path, options);
+    if (!string_value)
     {
-        std::cerr << "Failed to open \"" << path << "\" for reading\n";
-        return vsg::ref_ptr<Model>();
+        std::cerr << "Failed to open \"" << model_path << "\" for reading\n";
+        return vsg::ref_ptr<vsg::StateGroup>();
     }
 
-    std::stringstream stream(stringValue->value());
-
-    m_model = Model::create();
+    std::stringstream stream(string_value->value());
 
     std::string input;
     while (std::getline(stream, input))
@@ -63,7 +72,51 @@ vsg::ref_ptr<Model> DMD_Reader::read(const vsg::Path& path, vsg::ref_ptr<const v
             calculate_vertex_normals();
         }
     }
-    return m_model;
+
+    reset_mesh_arrays();
+
+    combine_meshes_array();
+
+    auto shader_set = vsg::createPhongShaderSet(options);
+    if (!shader_set)
+    {
+        std::cerr << "Failed to create shader set\n";
+        return vsg::ref_ptr<vsg::StateGroup>();
+    }
+
+    auto graphics_pipeline_config = vsg::GraphicsPipelineConfigurator::create(shader_set);
+
+    vsg::DataList vertex_arrays;
+    graphics_pipeline_config->assignArray(vertex_arrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, m_model_vertices);
+    graphics_pipeline_config->assignArray(vertex_arrays, "vsg_Normal", VK_VERTEX_INPUT_RATE_VERTEX, m_model_normals);
+    graphics_pipeline_config->assignArray(vertex_arrays, "vsg_TexCoord0", VK_VERTEX_INPUT_RATE_VERTEX, m_model_tex_coords);
+    graphics_pipeline_config->assignArray(vertex_arrays, "vsg_Color", VK_VERTEX_INPUT_RATE_VERTEX, m_model_colors);
+
+    auto draw_commands = vsg::Commands::create();
+    draw_commands->addChild(vsg::BindVertexBuffers::create(graphics_pipeline_config->baseAttributeBinding, vertex_arrays));
+    draw_commands->addChild(vsg::BindIndexBuffer::create(m_model_indices));
+    draw_commands->addChild(vsg::DrawIndexed::create(m_model_indices->size(), 1, 0, 0, 0));
+
+    if (texture_path)
+    {
+        auto texture_data = vsg::read_cast<vsg::Data>(texture_path, options);
+        if (!texture_data)
+        {
+            std::cerr << "Failed to read texture file \"" << texture_path << "\"\n";
+        }
+        else
+        {
+            graphics_pipeline_config->assignTexture("diffuseMap", texture_data);
+        }
+    }
+
+    graphics_pipeline_config->init();
+
+    auto state_group = vsg::StateGroup::create();
+    graphics_pipeline_config->copyTo(state_group);
+    state_group->addChild(draw_commands);
+
+    return state_group;
 }
 
 void DMD_Reader::remove_CR_symbols(std::string& str)
@@ -81,7 +134,12 @@ void DMD_Reader::remove_CR_symbols(std::string& str)
 
 void DMD_Reader::add_mesh()
 {
-    m_current_mesh = &(m_model->meshes.emplace_back(Mesh()));
+    m_current_mesh = &(m_meshes.emplace_back(Mesh()));
+    reset_mesh_arrays();
+}
+
+void DMD_Reader::reset_mesh_arrays()
+{
     m_temp_vertices.reset();
     m_temp_indices.reset();
     m_vertices_count = 0;
@@ -194,4 +252,47 @@ void DMD_Reader::calculate_vertex_normals()
         vertex_normal2 += face_normal;
         vertex_normal3 += face_normal;
     }
+}
+
+void DMD_Reader::combine_meshes_array()
+{
+    std::size_t model_vertices_count = 0;
+    std::size_t model_indices_count = 0;
+    for (auto& mesh : m_meshes)
+    {
+        model_vertices_count += mesh.vertices->size();
+        model_indices_count += mesh.indices->size();
+    }
+
+    m_model_vertices = vsg::vec3Array::create(model_vertices_count);
+    m_model_normals = vsg::vec3Array::create(model_vertices_count);
+    m_model_tex_coords = vsg::vec3Array::create(model_vertices_count);
+    m_model_colors = vsg::vec4Array::create(model_vertices_count);
+    m_model_indices = vsg::ushortArray::create(model_indices_count);
+
+    model_vertices_count = 0;
+    model_indices_count = 0;
+
+    for (auto& mesh : m_meshes)
+    {
+        auto mesh_vertices_count = mesh.vertices->size();
+        for (std::size_t i = 0; i < mesh_vertices_count; ++i)
+        {
+            m_model_vertices->at(i + model_vertices_count) = mesh.vertices->at(i);
+            m_model_normals->at(i + model_vertices_count) = mesh.normals->at(i);
+            m_model_tex_coords->at(i + model_vertices_count) = mesh.tex_coords->at(i);
+            m_model_colors->at(i + model_vertices_count) = mesh.colors->at(i);
+        }
+
+        auto mesh_indices_count = mesh.indices->size();
+        for (std::size_t i = 0; i < mesh_indices_count; ++i)
+        {
+            m_model_indices->at(i + model_indices_count) = mesh.indices->at(i);
+        }
+
+        model_vertices_count += mesh_vertices_count;
+        model_indices_count += mesh_indices_count;
+    }
+
+    m_meshes.clear();
 }
