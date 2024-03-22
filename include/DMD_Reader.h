@@ -20,14 +20,14 @@ class DMD_Reader : public vsg::txt
 public:
     DMD_Reader();
 
-    vsg::ref_ptr<vsg::StateGroup> read(
+    vsg::ref_ptr<vsg::MatrixTransform> read(
         const vsg::Path& model_path,
         const vsg::Path& texture_path,
         vsg::ref_ptr<const vsg::Options> options
     );
 
 private:
-    vsg::ref_ptr<vsg::StateGroup> m_model;
+    vsg::ref_ptr<vsg::MatrixTransform> m_model;
     std::vector<Mesh> m_meshes;
     Mesh* m_current_mesh = nullptr;
 

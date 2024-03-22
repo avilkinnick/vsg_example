@@ -11,10 +11,7 @@ add_executable(test_vsg src/main.cpp
     include/DMD_Reader.h
     include/Mesh.h
 
-    include/vsg_Instance.h
-
     src/DMD_Reader.cpp
-    src/vsg_Instance.cpp
 )
 
 target_include_directories(test_vsg PRIVATE include)

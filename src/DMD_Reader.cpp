@@ -8,6 +8,7 @@
 #include <vsg/core/Value.h>
 #include <vsg/io/read.h>
 #include <vsg/maths/vec3.h>
+#include <vsg/nodes/MatrixTransform.h>
 #include <vsg/utils/GraphicsPipelineConfigurator.h>
 #include <vsg/utils/ShaderSet.h>
 
@@ -19,7 +20,7 @@ DMD_Reader::DMD_Reader()
     supportedExtensions.insert(".dmd");
 }
 
-vsg::ref_ptr<vsg::StateGroup> DMD_Reader::read(
+vsg::ref_ptr<vsg::MatrixTransform> DMD_Reader::read(
     const vsg::Path& model_path,
     const vsg::Path& texture_path,
     vsg::ref_ptr<const vsg::Options> options
@@ -29,7 +30,7 @@ vsg::ref_ptr<vsg::StateGroup> DMD_Reader::read(
     if (!string_value)
     {
         std::cerr << "Failed to open \"" << model_path << "\" for reading\n";
-        return vsg::ref_ptr<vsg::StateGroup>();
+        return vsg::ref_ptr<vsg::MatrixTransform>();
     }
 
     std::stringstream stream(string_value->value());
@@ -81,7 +82,7 @@ vsg::ref_ptr<vsg::StateGroup> DMD_Reader::read(
     if (!shader_set)
     {
         std::cerr << "Failed to create shader set\n";
-        return vsg::ref_ptr<vsg::StateGroup>();
+        return vsg::ref_ptr<vsg::MatrixTransform>();
     }
 
     auto graphics_pipeline_config = vsg::GraphicsPipelineConfigurator::create(shader_set);
@@ -116,7 +117,10 @@ vsg::ref_ptr<vsg::StateGroup> DMD_Reader::read(
     graphics_pipeline_config->copyTo(state_group);
     state_group->addChild(draw_commands);
 
-    return state_group;
+    auto matrix_transform = vsg::MatrixTransform::create();
+    matrix_transform->addChild(state_group);
+
+    return matrix_transform;
 }
 
 void DMD_Reader::remove_CR_symbols(std::string& str)
