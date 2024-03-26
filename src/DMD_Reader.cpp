@@ -22,7 +22,7 @@ DMD_Reader::DMD_Reader()
 
 vsg::ref_ptr<vsg::MatrixTransform> DMD_Reader::read(
     const vsg::Path& model_path,
-    const vsg::Path& texture_path,
+    vsg::ref_ptr<vsg::Data> texture_data,
     vsg::ref_ptr<const vsg::Options> options
 )
 {
@@ -36,41 +36,57 @@ vsg::ref_ptr<vsg::MatrixTransform> DMD_Reader::read(
     std::stringstream stream(string_value->value());
 
     std::string input;
+
+    bool object_added = false;
+    bool numverts_readed = false;
+    bool vertices_readed = false;
+    bool faces_readed = false;
+    bool numtverts_readed = false;
+    bool tverts_readed = false;
+    bool tfaces_readed = false;
+
     while (std::getline(stream, input))
     {
         remove_CR_symbols(input);
 
-        if (input == "New object")
+        if (input == "New object" && !object_added)
         {
             add_mesh();
+            object_added = true;
         }
-        else if (input == "numverts numfaces")
+        else if (input == "numverts numfaces" && !numverts_readed)
         {
             read_numverts_and_numfaces(stream);
             init_temp_arrays();
+            numverts_readed = true;
         }
-        else if (input == "Mesh vertices:")
+        else if (input == "Mesh vertices:" && !vertices_readed)
         {
             read_mesh_vertices(stream);
+            vertices_readed = true;
         }
-        else if (input == "Mesh faces:")
+        else if (input == "Mesh faces:" && !faces_readed)
         {
             read_mesh_faces(stream);
+            faces_readed = true;
         }
-        else if (input == "numtverts numtvfaces")
+        else if (input == "numtverts numtvfaces" && !numtverts_readed)
         {
             read_numtverts_and_numtvfaces(stream);
             init_mesh_arrays();
             set_default_color();
+            numtverts_readed = true;
         }
-        else if (input == "Texture vertices:")
+        else if (input == "Texture vertices:" && !tverts_readed)
         {
             read_texture_vertices(stream);
+            tverts_readed = true;
         }
-        else if (input == "Texture faces:")
+        else if (input == "Texture faces:" && !tfaces_readed)
         {
             read_and_proceed_texture_faces(stream);
             calculate_vertex_normals();
+            tfaces_readed = true;
         }
     }
 
@@ -98,18 +114,7 @@ vsg::ref_ptr<vsg::MatrixTransform> DMD_Reader::read(
     draw_commands->addChild(vsg::BindIndexBuffer::create(m_model_indices));
     draw_commands->addChild(vsg::DrawIndexed::create(m_model_indices->size(), 1, 0, 0, 0));
 
-    if (texture_path)
-    {
-        auto texture_data = vsg::read_cast<vsg::Data>(texture_path, options);
-        if (!texture_data)
-        {
-            std::cerr << "Failed to read texture file \"" << texture_path << "\"\n";
-        }
-        else
-        {
-            graphics_pipeline_config->assignTexture("diffuseMap", texture_data);
-        }
-    }
+    graphics_pipeline_config->assignTexture("diffuseMap", texture_data);
 
     graphics_pipeline_config->init();
 
@@ -262,6 +267,7 @@ void DMD_Reader::combine_meshes_array()
 {
     std::size_t model_vertices_count = 0;
     std::size_t model_indices_count = 0;
+
     for (auto& mesh : m_meshes)
     {
         model_vertices_count += mesh.vertices->size();

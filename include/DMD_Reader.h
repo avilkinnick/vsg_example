@@ -22,7 +22,7 @@ public:
 
     vsg::ref_ptr<vsg::MatrixTransform> read(
         const vsg::Path& model_path,
-        const vsg::Path& texture_path,
+        vsg::ref_ptr<vsg::Data> texture_data,
         vsg::ref_ptr<const vsg::Options> options
     );
 
