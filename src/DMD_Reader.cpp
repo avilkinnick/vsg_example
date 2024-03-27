@@ -90,6 +90,9 @@ vsg::ref_ptr<vsg::MatrixTransform> DMD_Reader::read(
         }
     }
 
+    if (!object_added || !numverts_readed)
+        return vsg::ref_ptr<vsg::MatrixTransform>();
+
     reset_mesh_arrays();
 
     combine_meshes_array();
@@ -114,7 +117,8 @@ vsg::ref_ptr<vsg::MatrixTransform> DMD_Reader::read(
     draw_commands->addChild(vsg::BindIndexBuffer::create(m_model_indices));
     draw_commands->addChild(vsg::DrawIndexed::create(m_model_indices->size(), 1, 0, 0, 0));
 
-    graphics_pipeline_config->assignTexture("diffuseMap", texture_data);
+    if (texture_data)
+        graphics_pipeline_config->assignTexture("diffuseMap", texture_data);
 
     graphics_pipeline_config->init();
 

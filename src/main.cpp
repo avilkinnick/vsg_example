@@ -9,8 +9,8 @@ struct Model
 {
     std::string model_path;
     std::string texture_path;
-    vsg::t_vec3<double> translation;
-    vsg::t_vec3<double> rotation;
+    vsg::vec3 translation;
+    vsg::vec3 rotation;
 };
 
 int main(int argc, char* argv[])
@@ -33,7 +33,7 @@ int main(int argc, char* argv[])
         std::string route_path = "../routes/konotop-suchinichi";
         std::map<std::string, vsg::ref_ptr<vsg::Data>> textures;
         std::map<std::string, Model> models;
-
+        std::vector<Model> models2;
         {
             std::ifstream file(route_path + "/objects.ref");
             std::string str;
@@ -48,26 +48,21 @@ int main(int argc, char* argv[])
                 std::string name, model_path, texture_path;
                 stream >> name >> model_path >> texture_path;
 
-                model_path = route_path + model_path;
-                texture_path = route_path + texture_path;
+                Model model;
+                model.model_path = route_path + model_path;
+                model.texture_path = route_path + texture_path;
+                models.insert({name, model});
 
                 if (textures.find(texture_path) == textures.end())
                 {
-                    auto texture_data = vsg::read_cast<vsg::Data>(texture_path, options);
+                    auto texture_data = vsg::read_cast<vsg::Data>(model.texture_path, options);
                     if (!texture_data)
                     {
-                        std::cerr << "Failed to read texture file \"" << texture_path << "\"\n";
+                        std::cerr << "Failed to read texture file \"" << model.texture_path << "\"\n";
                     }
                     else
                     {
-                        auto texture = vsg::Image::create(texture_data);
-
-                        textures.insert({ texture_path, texture_data });
-
-                        Model model;
-                        model.model_path = model_path;
-                        model.texture_path = texture_path;
-                        models.insert({name, model});
+                        textures.insert({ model.texture_path, texture_data });
                     }
                 }
             }
@@ -100,32 +95,48 @@ int main(int argc, char* argv[])
                 std::string name;
                 double tx, ty, tz, rx, ry, rz;
                 stream >> name >> tx >> ty >> tz >> rx >> ry >> rz;
-                rx *= vsg::PIf / 180.0f;
-                ry *= vsg::PIf / 180.0f;
-                rz *= vsg::PIf / 180.0f;
+                rx = vsg::radians(rx);
+                ry = vsg::radians(ry);
+                rz = vsg::radians(rz);
 
                 if (models.find(name) != models.end())
                 {
-                    models.at(name).translation.set(tx, ty, tz);
-                    models.at(name).rotation.set(rx, ry, rz);
+                    auto& model = models.at(name);
+                    models2.emplace_back(Model{model.model_path, model.texture_path, vsg::vec3(tx, ty, tz), vsg::vec3(rx, ry, rz)});
                 }
+
             }
         }
 
-        for (auto& model_pair : models)
-        {
-            auto& model_data = model_pair.second;
-            auto model = DMD_Reader().read(model_data.model_path, textures.at(model_data.texture_path), options);
-            const auto& rotation = model_data.rotation;
-            auto m1 = vsg::translate(model_data.translation);
-            auto m2 = vsg::rotate(-rotation.z, vsg::t_vec3<double>(0.0, 0.0, 1.0));
-            auto m3 = vsg::rotate(-rotation.x, vsg::t_vec3<double>(1.0, 0.0, 0.0));
-            auto m4 = vsg::rotate(-rotation.y, vsg::t_vec3<double>(0.0, 1.0, 0.0));
-            // model->matrix = m4 * m3 * m2 * m1;
+        models.clear();
 
-            scene_graph->addChild(model);
+        for (auto& model_data : models2)
+        {
+            vsg::ref_ptr<vsg::Data> texture_data;
+            if (textures.find(model_data.texture_path) != textures.end())
+            {
+                texture_data = textures.at(model_data.texture_path);
+            }
+
+            auto model = DMD_Reader().read(model_data.model_path, texture_data, options);
+
+            if (model)
+            {
+                const auto& rotation = model_data.rotation;
+                auto m1 = vsg::translate(model_data.translation);
+                auto m2 = vsg::rotate(-rotation.z, vsg::vec3(0.0f, 0.0f, 1.0f));
+                auto m3 = vsg::rotate(-rotation.x, vsg::vec3(1.0f, 0.0f, 0.0f));
+                auto m4 = vsg::rotate(-rotation.y, vsg::vec3(0.0f, 1.0f, 0.0f));
+                model->matrix = m1 * m2 * m3 * m4;
+
+                scene_graph->addChild(model);
+                // scene_graph->addChild(vsg::LOD::Child{50.0, model});
+                if (scene_graph->children.size() > 600)
+                    break;
+            }
         }
 
+        models2.clear();
         textures.clear();
 
         vsg::ComputeBounds compute_bounds;
@@ -142,10 +153,11 @@ int main(int argc, char* argv[])
         }
 
         double near_far_ratio = 0.001;
-        auto window_width = static_cast<double>(window->extent2D().width);
-        auto window_height = static_cast<double>(window->extent2D().height);
+        double window_width = static_cast<double>(window->extent2D().width);
+        double window_height = static_cast<double>(window->extent2D().height);
+        double aspect_ratio = window_width / window_height;
         auto viewport = vsg::ViewportState::create(0, 0, window_width, window_height);
-        auto perspective = vsg::Perspective::create(60.0, window_width / window_height, near_far_ratio * radius, radius * 10.0);
+        auto perspective = vsg::Perspective::create(60.0, aspect_ratio, near_far_ratio * radius, radius * 10.0);
         auto look_at = vsg::LookAt::create(centre + vsg::dvec3(100.0, 100.0, 100.0), centre + vsg::dvec3(10.0, 10.0, 10.0), vsg::dvec3(0.0, 0.0, 1.0));
         auto camera = vsg::Camera::create(perspective, look_at, viewport);
 
@@ -156,20 +168,32 @@ int main(int argc, char* argv[])
         viewer->assignRecordAndSubmitTaskAndPresentation({command_graph});
         viewer->compile();
         viewer->addEventHandler(vsg::CloseHandler::create(viewer));
-        viewer->addEventHandler(vsg::Trackball::create(camera));
+
+        auto trackball = vsg::Trackball::create(camera);
+        // trackball->moveForwardKey = vsg::KEY_w;
+        // trackball->moveBackwardKey = vsg::KEY_s;
+        // trackball->moveLeftKey = vsg::KEY_a;
+        // trackball->moveRightKey = vsg::KEY_d;
+        // trackball->turnLeftKey = vsg::KEY_Leftcurlybracket;
+        // trackball->turnRightKey = vsg::KEY_Leftcurlybracket;
+        // trackball->pitchUpKey = vsg::KEY_Leftcurlybracket;
+        // trackball->pitchDownKey = vsg::KEY_Leftcurlybracket;
+        // trackball->rollLeftKey = vsg::KEY_Leftcurlybracket;
+        // trackball->rollRightKey = vsg::KEY_Leftcurlybracket;
+        // trackball->moveUpKey = vsg::KEY_Leftcurlybracket;
+        // trackball->moveDownKey = vsg::KEY_Leftcurlybracket;
+
+        viewer->addEventHandler(trackball);
 
         while (viewer->advanceToNextFrame())
         {
             viewer->handleEvents();
-
-            auto keyboard = vsg::Keyboard::create();
-
             viewer->update();
             viewer->recordAndSubmit();
             viewer->present();
         }
     }
-    catch (vsg::Exception error)
+    catch (const vsg::Exception& error)
     {
         std::cerr << error.message << '\n';
     }
