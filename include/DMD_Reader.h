@@ -3,12 +3,7 @@
 
 #include "Mesh.h"
 
-#include <vsg/core/Array.h>
-#include <vsg/core/ref_ptr.h>
-#include <vsg/io/Options.h>
-#include <vsg/io/Path.h>
-#include <vsg/io/txt.h>
-#include <vsg/nodes/StateGroup.h>
+#include <vsg/all.h>
 
 #include <cstddef>
 #include <sstream>

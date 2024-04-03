@@ -1,17 +1,5 @@
 #include "DMD_Reader.h"
 
-#include <vsg/commands/BindVertexBuffers.h>
-#include <vsg/commands/BindIndexBuffer.h>
-#include <vsg/commands/DrawIndexed.h>
-#include <vsg/commands/Commands.h>
-#include <vsg/core/Data.h>
-#include <vsg/core/Value.h>
-#include <vsg/io/read.h>
-#include <vsg/maths/vec3.h>
-#include <vsg/nodes/MatrixTransform.h>
-#include <vsg/utils/GraphicsPipelineConfigurator.h>
-#include <vsg/utils/ShaderSet.h>
-
 #include <iostream>
 #include <set>
 
@@ -91,7 +79,9 @@ vsg::ref_ptr<vsg::MatrixTransform> DMD_Reader::read(
     }
 
     if (!object_added || !numverts_readed)
+    {
         return vsg::ref_ptr<vsg::MatrixTransform>();
+    }
 
     reset_mesh_arrays();
 
@@ -118,7 +108,9 @@ vsg::ref_ptr<vsg::MatrixTransform> DMD_Reader::read(
     draw_commands->addChild(vsg::DrawIndexed::create(m_model_indices->size(), 1, 0, 0, 0));
 
     if (texture_data)
+    {
         graphics_pipeline_config->assignTexture("diffuseMap", texture_data);
+    }
 
     graphics_pipeline_config->init();
 
@@ -126,7 +118,13 @@ vsg::ref_ptr<vsg::MatrixTransform> DMD_Reader::read(
     graphics_pipeline_config->copyTo(state_group);
     state_group->addChild(draw_commands);
 
+    // auto paged_LOD = vsg::PagedLOD::create();
+    // paged_LOD->children[0].minimumScreenHeightRatio = 0.0;
+    // paged_LOD->children[0].node = state_group;
+    // paged_LOD->children[1] = paged_LOD->children[0];
+
     auto matrix_transform = vsg::MatrixTransform::create();
+    // matrix_transform->addChild(paged_LOD);
     matrix_transform->addChild(state_group);
 
     return matrix_transform;
