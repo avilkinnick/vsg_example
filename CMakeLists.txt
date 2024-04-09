@@ -8,9 +8,11 @@ find_package(vsg REQUIRED)
 find_package(vsgXchange REQUIRED)
 
 add_executable(test_vsg src/main.cpp
+    include/Application.h
     include/DMD_Reader.h
     include/Mesh.h
 
+    src/Application.cpp
     src/DMD_Reader.cpp
 )
 

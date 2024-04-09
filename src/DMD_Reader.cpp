@@ -23,7 +23,7 @@ vsg::ref_ptr<vsg::MatrixTransform> DMD_Reader::read(
 
     std::stringstream stream(string_value->value());
 
-    std::string input;
+    std::string str;
 
     bool object_added = false;
     bool numverts_readed = false;
@@ -33,44 +33,44 @@ vsg::ref_ptr<vsg::MatrixTransform> DMD_Reader::read(
     bool tverts_readed = false;
     bool tfaces_readed = false;
 
-    while (std::getline(stream, input))
+    while (std::getline(stream, str))
     {
-        remove_CR_symbols(input);
+        remove_CR_symbols(str);
 
-        if (input == "New object" && !object_added)
+        if (str == "New object" && !object_added)
         {
             add_mesh();
             object_added = true;
         }
-        else if (input == "numverts numfaces" && !numverts_readed)
+        else if (str == "numverts numfaces" && !numverts_readed)
         {
             read_numverts_and_numfaces(stream);
             init_temp_arrays();
             numverts_readed = true;
         }
-        else if (input == "Mesh vertices:" && !vertices_readed)
+        else if (str == "Mesh vertices:" && !vertices_readed)
         {
             read_mesh_vertices(stream);
             vertices_readed = true;
         }
-        else if (input == "Mesh faces:" && !faces_readed)
+        else if (str == "Mesh faces:" && !faces_readed)
         {
             read_mesh_faces(stream);
             faces_readed = true;
         }
-        else if (input == "numtverts numtvfaces" && !numtverts_readed)
+        else if (str == "numtverts numtvfaces" && !numtverts_readed)
         {
             read_numtverts_and_numtvfaces(stream);
             init_mesh_arrays();
             set_default_color();
             numtverts_readed = true;
         }
-        else if (input == "Texture vertices:" && !tverts_readed)
+        else if (str == "Texture vertices:" && !tverts_readed)
         {
             read_texture_vertices(stream);
             tverts_readed = true;
         }
-        else if (input == "Texture faces:" && !tfaces_readed)
+        else if (str == "Texture faces:" && !tfaces_readed)
         {
             read_and_proceed_texture_faces(stream);
             calculate_vertex_normals();
@@ -78,7 +78,8 @@ vsg::ref_ptr<vsg::MatrixTransform> DMD_Reader::read(
         }
     }
 
-    if (!object_added || !numverts_readed)
+    if (!object_added || !numverts_readed || !vertices_readed || !faces_readed
+        || !numtverts_readed || !tverts_readed || !tfaces_readed)
     {
         return vsg::ref_ptr<vsg::MatrixTransform>();
     }
@@ -86,6 +87,50 @@ vsg::ref_ptr<vsg::MatrixTransform> DMD_Reader::read(
     reset_mesh_arrays();
 
     combine_meshes_array();
+
+    vsg::DescriptorSetLayoutBindings descriptor_bindings{{
+        0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr
+    }};
+
+    auto descriptor_set_layout =
+        vsg::DescriptorSetLayout::create(descriptor_bindings);
+
+    vsg::PushConstantRanges push_constant_ranges{{
+        VK_SHADER_STAGE_VERTEX_BIT, 0, 128
+    }};
+
+    vsg::VertexInputState::Bindings vertex_bindings_description{
+        VkVertexInputBindingDescription{0, sizeof(vsg::vec3),
+                                        VK_VERTEX_INPUT_RATE_VERTEX},
+        VkVertexInputBindingDescription{1, sizeof(vsg::vec3),
+                                        VK_VERTEX_INPUT_RATE_VERTEX},
+        VkVertexInputBindingDescription{2, sizeof(vsg::vec2),
+                                        VK_VERTEX_INPUT_RATE_VERTEX}
+    };
+
+    vsg::VertexInputState::Attributes vertex_attribute_descriptions{
+        VkVertexInputAttributeDescription{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0},
+        VkVertexInputAttributeDescription{1, 1, VK_FORMAT_R32G32B32_SFLOAT, 0},
+        VkVertexInputAttributeDescription{2, 2, VK_FORMAT_R32G32_SFLOAT, 0},
+    };
+
+    vsg::GraphicsPipelineStates pipeline_states{
+        vsg::VertexInputState::create(vertex_bindings_description,
+                                      vertex_attribute_descriptions),
+        vsg::InputAssemblyState::create(),
+        vsg::RasterizationState::create(),
+        vsg::MultisampleState::create(),
+        vsg::ColorBlendState::create(),
+        vsg::DepthStencilState::create()
+    };
+
+    auto pipeline_layout = vsg::PipelineLayout::create(
+        vsg::DescriptorSetLayouts{descriptor_set_layout},
+        push_constant_ranges
+    );
+
+
 
     auto shader_set = vsg::createPhongShaderSet(options);
     if (!shader_set)
@@ -119,9 +164,10 @@ vsg::ref_ptr<vsg::MatrixTransform> DMD_Reader::read(
     state_group->addChild(draw_commands);
 
     // auto paged_LOD = vsg::PagedLOD::create();
+    // paged_LOD->filename = model_path;
+    // paged_LOD->options = options;
     // paged_LOD->children[0].minimumScreenHeightRatio = 0.0;
     // paged_LOD->children[0].node = state_group;
-    // paged_LOD->children[1] = paged_LOD->children[0];
 
     auto matrix_transform = vsg::MatrixTransform::create();
     // matrix_transform->addChild(paged_LOD);
@@ -243,19 +289,20 @@ void DMD_Reader::calculate_vertex_normals()
 {
     for (std::size_t i = 0; i < m_faces_count; ++i)
     {
-        auto index1 = m_current_mesh->indices->at(i * 3);
-        auto index2 = m_current_mesh->indices->at(i * 3 + 1);
-        auto index3 = m_current_mesh->indices->at(i * 3 + 2);
+        std::size_t index1 = m_current_mesh->indices->at(i * 3);
+        std::size_t index2 = m_current_mesh->indices->at(i * 3 + 1);
+        std::size_t index3 = m_current_mesh->indices->at(i * 3 + 2);
 
-        auto& vertex1 = m_current_mesh->vertices->at(index1);
-        auto& vertex2 = m_current_mesh->vertices->at(index2);
-        auto& vertex3 = m_current_mesh->vertices->at(index3);
+        vsg::vec3& vertex1 = m_current_mesh->vertices->at(index1);
+        vsg::vec3& vertex2 = m_current_mesh->vertices->at(index2);
+        vsg::vec3& vertex3 = m_current_mesh->vertices->at(index3);
 
-        auto& vertex_normal1 = m_current_mesh->normals->at(index1);
-        auto& vertex_normal2 = m_current_mesh->normals->at(index2);
-        auto& vertex_normal3 = m_current_mesh->normals->at(index3);
+        vsg::vec3& vertex_normal1 = m_current_mesh->normals->at(index1);
+        vsg::vec3& vertex_normal2 = m_current_mesh->normals->at(index2);
+        vsg::vec3& vertex_normal3 = m_current_mesh->normals->at(index3);
 
-        vsg::vec3 face_normal = vsg::cross(vertex2 - vertex1, vertex3 - vertex1);
+        vsg::vec3 face_normal = vsg::cross(vertex2 - vertex1,
+                                           vertex3 - vertex1);
 
         // Добавить к каждой нормали вершины нормаль поверхности,
         // на которой она лежит
@@ -287,7 +334,7 @@ void DMD_Reader::combine_meshes_array()
 
     for (auto& mesh : m_meshes)
     {
-        auto mesh_vertices_count = mesh.vertices->size();
+        std::size_t mesh_vertices_count = mesh.vertices->size();
         for (std::size_t i = 0; i < mesh_vertices_count; ++i)
         {
             m_model_vertices->at(i + model_vertices_count) = mesh.vertices->at(i);
@@ -296,7 +343,7 @@ void DMD_Reader::combine_meshes_array()
             m_model_colors->at(i + model_vertices_count) = mesh.colors->at(i);
         }
 
-        auto mesh_indices_count = mesh.indices->size();
+        std::size_t mesh_indices_count = mesh.indices->size();
         for (std::size_t i = 0; i < mesh_indices_count; ++i)
         {
             m_model_indices->at(i + model_indices_count) = mesh.indices->at(i);
