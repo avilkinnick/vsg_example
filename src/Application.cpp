@@ -5,6 +5,24 @@
 #include <iostream>
 #include <stdexcept>
 
+vsg::ref_ptr<vsg::MatrixTransform> Model(
+    vsg::ref_ptr<vsg::GraphicsPipelineConfigurator> graphics_pipiline_configurator,
+    vsg::ref_ptr<vsg::Data> texture_data)
+{
+    if (!texture_data)
+    {
+        return {};
+    }
+
+    graphics_pipiline_configurator->assignTexture("diffuseMap", texture_data);
+    graphics_pipiline_configurator->init();
+
+    auto state_group = vsg::StateGroup::create();
+    graphics_pipiline_configurator->copyTo(state_group);
+    state_group->addChild()
+}
+
+
 Application::Application(int* argc, char** argv)
     : arguments(argc, argv)
 {
@@ -47,6 +65,7 @@ void Application::initialize_options()
 {
     options = vsg::Options::create();
     options->add(vsgXchange::all::create());
+    options->add(DMD_Reader::create());
 }
 
 void Application::initialize_scene_graph()
