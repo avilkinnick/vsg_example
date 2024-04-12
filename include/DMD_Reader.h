@@ -5,11 +5,18 @@
 
 #include <string>
 
-class DMD_Reader : public vsg::txt
+struct ModelData : public vsg::Inherit<vsg::Object, ModelData>
+{
+    vsg::ref_ptr<vsg::vec3Array> vertices;
+    vsg::ref_ptr<vsg::vec3Array> normals;
+    vsg::ref_ptr<vsg::vec3Array> tex_coords;
+    vsg::ref_ptr<vsg::vec4Array> colors;
+    vsg::ref_ptr<vsg::ushortArray> indices;
+};
+
+class DMD_Reader : public vsg::Inherit<vsg::ReaderWriter, DMD_Reader>
 {
 public:
-    DMD_Reader();
-
     vsg::ref_ptr<vsg::Object> read(
         const vsg::Path&,
         vsg::ref_ptr<const vsg::Options> = {}

@@ -5,7 +5,7 @@
 #include <vsgXchange/all.h>
 
 //------------------------------
-struct ModelData
+struct ModelData2
 {
     std::string model_path;
     std::string texture_path;
@@ -50,7 +50,7 @@ private:
 
     //-------------------------------
     const std::string route_path = "../routes/konotop-suchinichi";
-    std::map<std::string, ModelData> model_map;
+    std::map<std::string, ModelData2> model_map;
     std::map<std::string, vsg::ref_ptr<vsg::Data>> texture_map;
     //-------------------------------
 };

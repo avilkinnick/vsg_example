@@ -6,20 +6,50 @@
 #include <stdexcept>
 
 vsg::ref_ptr<vsg::MatrixTransform> Model(
-    vsg::ref_ptr<vsg::GraphicsPipelineConfigurator> graphics_pipiline_configurator,
-    vsg::ref_ptr<vsg::Data> texture_data)
+    vsg::ref_ptr<ModelData> model_data,
+    vsg::ref_ptr<vsg::Data> texture_data,
+    vsg::ref_ptr<const vsg::Options> options = {})
 {
-    if (!texture_data)
+    if (!model_data)
     {
         return {};
     }
 
-    graphics_pipiline_configurator->assignTexture("diffuseMap", texture_data);
-    graphics_pipiline_configurator->init();
+    auto shader_set = vsg::createPhongShaderSet(options);
+    if (!shader_set)
+    {
+        std::cerr << "Failed to create Phong shader set!\n";
+        return {};
+    }
+
+    auto pipeline = vsg::GraphicsPipelineConfigurator::create(shader_set);
+
+    vsg::DataList vertex_arrays;
+    pipeline->assignArray(vertex_arrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, model_data->vertices);
+    pipeline->assignArray(vertex_arrays, "vsg_Normal", VK_VERTEX_INPUT_RATE_VERTEX, model_data->normals);
+    pipeline->assignArray(vertex_arrays, "vsg_TexCoord0", VK_VERTEX_INPUT_RATE_VERTEX, model_data->tex_coords);
+    pipeline->assignArray(vertex_arrays, "vsg_Color", VK_VERTEX_INPUT_RATE_VERTEX, model_data->colors);
+
+    auto draw_commands = vsg::Commands::create();
+    draw_commands->addChild(vsg::BindVertexBuffers::create(pipeline->baseAttributeBinding, vertex_arrays));
+    draw_commands->addChild(vsg::BindIndexBuffer::create(model_data->indices));
+    draw_commands->addChild(vsg::DrawIndexed::create(model_data->indices->size(), 1, 0, 0, 0));
+
+    if (texture_data)
+    {
+        pipeline->assignTexture("diffuseMap", texture_data);
+    }
+
+    pipeline->init();
 
     auto state_group = vsg::StateGroup::create();
-    graphics_pipiline_configurator->copyTo(state_group);
-    state_group->addChild()
+    pipeline->copyTo(state_group);
+    state_group->addChild(draw_commands);
+
+    auto matrix_transform = vsg::MatrixTransform::create();
+    matrix_transform->addChild(state_group);
+
+    return matrix_transform;
 }
 
 
@@ -43,9 +73,9 @@ void Application::run()
 void Application::initialize()
 {
     initialize_options();
-    initialize_scene_graph();
     initialize_window();
     initialize_camera();
+    initialize_scene_graph();
     initialize_command_graph();
     initialize_viewer();
 }
@@ -98,7 +128,7 @@ void Application::load_model_paths()
         model_path = route_path + model_path;
         texture_path = route_path + texture_path;
 
-        ModelData model_data{model_path, texture_path};
+        ModelData2 model_data{model_path, texture_path};
         model_map.insert({name, model_data});
 
         if (texture_map.find(texture_path) != texture_map.end())
@@ -164,9 +194,13 @@ void Application::load_model_transformations()
 
 void Application::add_models_to_scene_graph()
 {
+    vsg::LoadPagedLOD load_paged_lod(camera);
+
     for (auto& model_data_pair : model_map)
     {
         auto& model_data = model_data_pair.second;
+
+        auto model_d = vsg::read_cast<ModelData>(model_data.model_path, options);
 
         vsg::ref_ptr<vsg::Data> texture_data;
         if (texture_map.find(model_data.texture_path) != texture_map.end())
@@ -174,9 +208,7 @@ void Application::add_models_to_scene_graph()
             texture_data = texture_map.at(model_data.texture_path);
         }
 
-        auto model = DMD_Reader().read(model_data.model_path,
-                                       texture_data, options);
-
+        auto model = Model(model_d, texture_data, options);
         if (model)
         {
             const auto& rotation = model_data.rotation;
@@ -186,13 +218,34 @@ void Application::add_models_to_scene_graph()
             auto m4 = vsg::rotate(-rotation.y, vsg::dvec3(0.0f, 1.0f, 0.0f));
             model->transform(m1 * m2 * m3 * m4);
 
-            scene_graph->addChild(model);
+            auto paged_lod = vsg::PagedLOD::create();
+            paged_lod->options = options;
+            paged_lod->children[0].minimumScreenHeightRatio = 1.0;
+            paged_lod->children[0].node = model;
+
+            vsg::ComputeBounds test_bounds;
+            model->accept(test_bounds);
+
+            const vsg::dbox& bounds = test_bounds.bounds;
+
+            vsg::dvec3 center = (bounds.min + bounds.max) * 0.5;
+            double radius = vsg::length(bounds.max - bounds.min) * 0.6;
+
+            paged_lod->bound = vsg::dsphere(center, radius);
+
+            // std::cout << paged_lod->bound << '\n';
+
+            load_paged_lod.apply(*(paged_lod.get()));
+
+            scene_graph->addChild(paged_lod);
             if (scene_graph->children.size() > 500)
             {
                 break;
             }
         }
+
     }
+    scene_graph->accept(load_paged_lod);
 
     model_map.clear();
     texture_map.clear();
@@ -217,8 +270,11 @@ void Application::initialize_camera()
     const double aspect_ratio = static_cast<double>(extent.width) / static_cast<double>(extent.height);
     constexpr double near_far_ratio = 0.001;
 
-    vsg::dvec3 center = (bounds.min + bounds.max) * 0.5;
-    double radius = vsg::length(bounds.max - bounds.min) * 0.6;
+    // vsg::dvec3 center = (bounds.min + bounds.max) * 0.5;
+    // double radius = vsg::length(bounds.max - bounds.min) * 0.6;
+    vsg::dvec3 center = vsg::dvec3(0.0, 0.0, 0.0);
+    double radius = 1000.0;
+    // std::cout << center << ' ' << radius << '\n';
 
     vsg::dvec3 eye = center + vsg::dvec3(100.0, 100.0, 100.0);
     vsg::dvec3 up = vsg::dvec3(0.0, 0.0, 1.0);

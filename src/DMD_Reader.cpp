@@ -5,11 +5,6 @@
 #include <iostream>
 #include <set>
 
-DMD_Reader::DMD_Reader()
-{
-    supportedExtensions.insert(".dmd");
-}
-
 vsg::ref_ptr<vsg::Object> DMD_Reader::read(
     const vsg::Path& filename,
     vsg::ref_ptr<const vsg::Options> options
@@ -17,21 +12,13 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(
 {
     vsg::Path found_filename = vsg::findFile(filename, options);
 
-    if (!vsg::compatibleExtension(options, supportedExtensions)
-        || vsg::fileExtension(filename) != ".dmd"
+    if (vsg::fileExtension(filename) != ".dmd"
         || !found_filename)
     {
         return {};
     }
 
-    auto string_value = read_cast<vsg::stringValue>(filename, options);
-    if (!string_value)
-    {
-        std::cerr << "Failed to open \"" << filename << "\" for reading\n";
-        return {};
-    }
-
-    std::stringstream stream(string_value->value());
+    std::ifstream stream(filename.string());
     std::string str;
 
     bool object_added = false;
@@ -53,12 +40,6 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(
     std::size_t faces_count = 0;
     std::size_t indices_count = 0;
     std::size_t temp_vertices_count = 0;
-
-    vsg::ref_ptr<vsg::vec3Array>   model_vertices;
-    vsg::ref_ptr<vsg::vec3Array>   model_normals;
-    vsg::ref_ptr<vsg::vec3Array>   model_tex_coords;
-    vsg::ref_ptr<vsg::vec4Array>   model_colors;
-    vsg::ref_ptr<vsg::ushortArray> model_indices;
 
     while (std::getline(stream, str))
     {
@@ -202,11 +183,12 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(
         model_indices_count += mesh.indices->size();
     }
 
-    model_vertices = vsg::vec3Array::create(model_vertices_count);
-    model_normals = vsg::vec3Array::create(model_vertices_count);
-    model_tex_coords = vsg::vec3Array::create(model_vertices_count);
-    model_colors = vsg::vec4Array::create(model_vertices_count);
-    model_indices = vsg::ushortArray::create(model_indices_count);
+    auto model_data = ModelData::create();
+    model_data->vertices = vsg::vec3Array::create(model_vertices_count);
+    model_data->normals = vsg::vec3Array::create(model_vertices_count);
+    model_data->tex_coords = vsg::vec3Array::create(model_vertices_count);
+    model_data->colors = vsg::vec4Array::create(model_vertices_count);
+    model_data->indices = vsg::ushortArray::create(model_indices_count);
 
     model_vertices_count = 0;
     model_indices_count = 0;
@@ -216,16 +198,16 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(
         std::size_t mesh_vertices_count = mesh.vertices->size();
         for (std::size_t i = 0; i < mesh_vertices_count; ++i)
         {
-            model_vertices->at(i + model_vertices_count) = mesh.vertices->at(i);
-            model_normals->at(i + model_vertices_count) = mesh.normals->at(i);
-            model_tex_coords->at(i + model_vertices_count) = mesh.tex_coords->at(i);
-            model_colors->at(i + model_vertices_count) = mesh.colors->at(i);
+            model_data->vertices->at(i + model_vertices_count) = mesh.vertices->at(i);
+            model_data->normals->at(i + model_vertices_count) = mesh.normals->at(i);
+            model_data->tex_coords->at(i + model_vertices_count) = mesh.tex_coords->at(i);
+            model_data->colors->at(i + model_vertices_count) = mesh.colors->at(i);
         }
 
         std::size_t mesh_indices_count = mesh.indices->size();
         for (std::size_t i = 0; i < mesh_indices_count; ++i)
         {
-            model_indices->at(i + model_indices_count) = mesh.indices->at(i);
+            model_data->indices->at(i + model_indices_count) = mesh.indices->at(i);
         }
 
         model_vertices_count += mesh_vertices_count;
@@ -234,43 +216,7 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(
 
     meshes.clear();
 
-    auto shader_set = vsg::createPhongShaderSet(options);
-    if (!shader_set)
-    {
-        std::cerr << "Failed to create shader set\n";
-        return vsg::ref_ptr<vsg::MatrixTransform>();
-    }
-
-    auto graphics_pipeline_config = vsg::GraphicsPipelineConfigurator::create(shader_set);
-
-    vsg::DataList vertex_arrays;
-    graphics_pipeline_config->assignArray(vertex_arrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, model_vertices);
-    graphics_pipeline_config->assignArray(vertex_arrays, "vsg_Normal", VK_VERTEX_INPUT_RATE_VERTEX, model_normals);
-    graphics_pipeline_config->assignArray(vertex_arrays, "vsg_TexCoord0", VK_VERTEX_INPUT_RATE_VERTEX, model_tex_coords);
-    graphics_pipeline_config->assignArray(vertex_arrays, "vsg_Color", VK_VERTEX_INPUT_RATE_VERTEX, model_colors);
-
-    auto draw_commands = vsg::Commands::create();
-    draw_commands->addChild(vsg::BindVertexBuffers::create(graphics_pipeline_config->baseAttributeBinding, vertex_arrays));
-    draw_commands->addChild(vsg::BindIndexBuffer::create(model_indices));
-    draw_commands->addChild(vsg::DrawIndexed::create(model_indices->size(), 1, 0, 0, 0));
-
-    // if (texture_data)
-    // {
-    //     graphics_pipeline_config->assignTexture("diffuseMap", texture_data);
-    // }
-
-    // graphics_pipeline_config->init();
-
-    // auto state_group = vsg::StateGroup::create();
-    // graphics_pipeline_config->copyTo(state_group);
-    // state_group->addChild(draw_commands);
-
-    // auto matrix_transform = vsg::MatrixTransform::create();
-    // matrix_transform->addChild(state_group);
-
-    // return matrix_transform;
-
-    return graphics_pipeline_config;
+    return model_data;
 }
 
 void DMD_Reader::remove_CR_symbols(std::string& str) const
