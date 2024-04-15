@@ -102,14 +102,14 @@ void Application::initialize_scene_graph()
 {
     scene_graph = vsg::Group::create();
 
-    load_model_paths();
-    load_model_transformations();
+    load_objects_ref();
+    load_route_map();
     add_models_to_scene_graph();
 
     scene_graph->accept(compute_bounds);
 }
 
-void Application::load_model_paths()
+void Application::load_objects_ref()
 {
     std::ifstream file(route_path + "/objects.ref");
     std::string str;
@@ -128,8 +128,7 @@ void Application::load_model_paths()
         model_path = route_path + model_path;
         texture_path = route_path + texture_path;
 
-        ModelData2 model_data{model_path, texture_path};
-        model_map.insert({name, model_data});
+        model_paths_map.insert({name, ModelPaths{model_path, texture_path}});
 
         if (texture_map.find(texture_path) != texture_map.end())
         {
@@ -139,20 +138,19 @@ void Application::load_model_paths()
         auto texture_data = vsg::read_cast<vsg::Data>(texture_path, options);
         if (!texture_data)
         {
-            std::cerr << "Failed to read texture file \""
-                      << texture_path << "\"\n";
+            std::cerr << "Failed to read texture file \"" << texture_path << "\"\n";
+            continue;
         }
-        else
-        {
-            texture_map.insert({texture_path, texture_data});
-        }
+
+        texture_map.insert({texture_path, texture_data});
     }
 }
 
-void Application::load_model_transformations()
+void Application::load_route_map()
 {
     std::ifstream file(route_path + "/route1.map");
     std::string str;
+
     while (std::getline(file, str))
     {
         while (true)
@@ -174,21 +172,19 @@ void Application::load_model_transformations()
         std::replace(str.begin(), str.end(), ',', ' ');
 
         std::stringstream stream(str);
+
         std::string name;
-        stream >> name;
+        double tx, ty, tz, rx, ry, rz;
+        stream >> name >> tx >> ty >> tz >> rx >> ry >> rz;
 
-        if (model_map.find(name) != model_map.end())
-        {
-            auto& translation = model_map.at(name).translation;
-            auto& rotation = model_map.at(name).rotation;
+        rx = vsg::radians(rx);
+        ry = vsg::radians(ry);
+        rz = vsg::radians(rz);
 
-            stream >> translation.x >> translation.y >> translation.z
-                >> rotation.x >> rotation.y >> rotation.z;
+        vsg::dvec3 translation = vsg::dvec3(tx, ty, tz);
+        vsg::dvec3 rotation = vsg::dvec3(rx, ry, rz);
 
-            rotation.x = vsg::radians(rotation.x);
-            rotation.y = vsg::radians(rotation.y);
-            rotation.z = vsg::radians(rotation.z);
-        }
+        model_transformations_map.insert({name, ModelTransformations{translation, rotation}});
     }
 }
 
@@ -196,59 +192,70 @@ void Application::add_models_to_scene_graph()
 {
     vsg::LoadPagedLOD load_paged_lod(camera);
 
-    for (auto& model_data_pair : model_map)
+    for (auto& model_transformations_pair : model_transformations_map)
     {
-        auto& model_data = model_data_pair.second;
+        const std::string& name = model_transformations_pair.first;
+        if (model_paths_map.find(name) == model_paths_map.end())
+        {
+            continue;
+        }
 
-        auto model_d = vsg::read_cast<ModelData>(model_data.model_path, options);
+        auto& model_paths = model_paths_map.find(name)->second;
+        auto& model_transformation = model_transformations_pair.second;
+
+        auto model_data = vsg::read_cast<ModelData>(model_paths.model_path, options);
+        if (!model_data)
+        {
+            continue;
+        }
 
         vsg::ref_ptr<vsg::Data> texture_data;
-        if (texture_map.find(model_data.texture_path) != texture_map.end())
+        if (texture_map.find(model_paths.texture_path) != texture_map.end())
         {
-            texture_data = texture_map.at(model_data.texture_path);
+            texture_data = texture_map.at(model_paths.texture_path);
         }
 
-        auto model = Model(model_d, texture_data, options);
-        if (model)
+        auto model = Model(model_data, texture_data, options);
+        if (!model)
         {
-            const auto& rotation = model_data.rotation;
-            auto m1 = vsg::translate(model_data.translation);
-            auto m2 = vsg::rotate(-rotation.z, vsg::dvec3(0.0f, 0.0f, 1.0f));
-            auto m3 = vsg::rotate(-rotation.x, vsg::dvec3(1.0f, 0.0f, 0.0f));
-            auto m4 = vsg::rotate(-rotation.y, vsg::dvec3(0.0f, 1.0f, 0.0f));
-            model->transform(m1 * m2 * m3 * m4);
-
-            auto paged_lod = vsg::PagedLOD::create();
-            paged_lod->options = options;
-            paged_lod->children[0].minimumScreenHeightRatio = 1.0;
-            paged_lod->children[0].node = model;
-
-            vsg::ComputeBounds test_bounds;
-            model->accept(test_bounds);
-
-            const vsg::dbox& bounds = test_bounds.bounds;
-
-            vsg::dvec3 center = (bounds.min + bounds.max) * 0.5;
-            double radius = vsg::length(bounds.max - bounds.min) * 0.6;
-
-            paged_lod->bound = vsg::dsphere(center, radius);
-
-            // std::cout << paged_lod->bound << '\n';
-
-            load_paged_lod.apply(*(paged_lod.get()));
-
-            scene_graph->addChild(paged_lod);
-            if (scene_graph->children.size() > 500)
-            {
-                break;
-            }
+            continue;
         }
 
+        const auto& rotation = model_transformation.rotation;
+
+        auto m1 = vsg::translate(model_transformation.translation);
+        auto m2 = vsg::rotate(-rotation.z, vsg::dvec3(0.0f, 0.0f, 1.0f));
+        auto m3 = vsg::rotate(-rotation.x, vsg::dvec3(1.0f, 0.0f, 0.0f));
+        auto m4 = vsg::rotate(-rotation.y, vsg::dvec3(0.0f, 1.0f, 0.0f));
+        model->matrix = m1 * m2 * m3 * m4;
+
+        auto paged_lod = vsg::PagedLOD::create();
+        paged_lod->options = options;
+        paged_lod->children[0].minimumScreenHeightRatio = 1.0;
+        paged_lod->children[0].node = model;
+
+        vsg::ComputeBounds test_bounds;
+        model->accept(test_bounds);
+        const vsg::dbox& bounds = test_bounds.bounds;
+        vsg::dvec3 center = (bounds.min + bounds.max) * 0.5;
+        double radius = vsg::length(bounds.max - bounds.min) * 0.6;
+
+        paged_lod->bound = vsg::dsphere(center, radius);
+
+        load_paged_lod.apply(*(paged_lod.get()));
+
+        scene_graph->addChild(paged_lod);
+        // std::cout << scene_graph->children.size() << '\n';
+        if (scene_graph->children.size() > 700)
+        {
+            break;
+        }
     }
     scene_graph->accept(load_paged_lod);
 
-    model_map.clear();
     texture_map.clear();
+    model_transformations_map.clear();
+    model_paths_map.clear();
 }
 
 void Application::initialize_window()
