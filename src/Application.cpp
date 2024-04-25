@@ -5,53 +5,88 @@
 #include <iostream>
 #include <stdexcept>
 
-vsg::ref_ptr<vsg::MatrixTransform> Model(
-    vsg::ref_ptr<ModelData> model_data,
-    vsg::ref_ptr<vsg::Data> texture_data,
-    vsg::ref_ptr<const vsg::Options> options = {})
+//------------------------------------------------------------------------------
+
+class Model
 {
-    if (!model_data)
+public:
+    vsg::ref_ptr<vsg::Data> texture_data;
+    vsg::ref_ptr<vsg::GraphicsPipelineConfigurator> pipeline;
+    vsg::ref_ptr<vsg::MatrixTransform> transform;
+    vsg::ref_ptr<vsg::PagedLOD> paged_lod;
+    bool visible = false;
+
+    void show()
     {
-        return {};
+        if (!visible)
+        {
+            pipeline->assignTexture("diffuseMap", texture_data);
+            visible = true;
+        }
     }
 
-    auto shader_set = vsg::createPhongShaderSet(options);
+    void hide()
+    {
+        if (visible)
+        {
+            pipeline->assignTexture("diffuseMap");
+            visible = false;
+        }
+    }
+};
+
+std::vector<Model> models;
+
+bool add_model(vsg::ref_ptr<ModelData> vertex_data, vsg::ref_ptr<vsg::Data> texture_data, vsg::ref_ptr<const vsg::Options> options = {})
+{
+    if (!vertex_data)
+    {
+        return false;
+    }
+
+    static auto shader_set = vsg::createPhongShaderSet(options);
     if (!shader_set)
     {
         std::cerr << "Failed to create Phong shader set!\n";
-        return {};
+        return false;
     }
 
-    auto pipeline = vsg::GraphicsPipelineConfigurator::create(shader_set);
+    Model model;
+
+    model.texture_data = texture_data;
+    model.pipeline = vsg::GraphicsPipelineConfigurator::create(shader_set);
 
     vsg::DataList vertex_arrays;
-    pipeline->assignArray(vertex_arrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, model_data->vertices);
-    pipeline->assignArray(vertex_arrays, "vsg_Normal", VK_VERTEX_INPUT_RATE_VERTEX, model_data->normals);
-    pipeline->assignArray(vertex_arrays, "vsg_TexCoord0", VK_VERTEX_INPUT_RATE_VERTEX, model_data->tex_coords);
-    pipeline->assignArray(vertex_arrays, "vsg_Color", VK_VERTEX_INPUT_RATE_VERTEX, model_data->colors);
+    model.pipeline->assignArray(vertex_arrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, vertex_data->vertices);
+    model.pipeline->assignArray(vertex_arrays, "vsg_Normal", VK_VERTEX_INPUT_RATE_VERTEX, vertex_data->normals);
+    model.pipeline->assignArray(vertex_arrays, "vsg_TexCoord0", VK_VERTEX_INPUT_RATE_VERTEX, vertex_data->tex_coords);
+    model.pipeline->assignArray(vertex_arrays, "vsg_Color", VK_VERTEX_INPUT_RATE_VERTEX, vertex_data->colors);
 
     auto draw_commands = vsg::Commands::create();
-    draw_commands->addChild(vsg::BindVertexBuffers::create(pipeline->baseAttributeBinding, vertex_arrays));
-    draw_commands->addChild(vsg::BindIndexBuffer::create(model_data->indices));
-    draw_commands->addChild(vsg::DrawIndexed::create(model_data->indices->size(), 1, 0, 0, 0));
+    draw_commands->addChild(vsg::BindVertexBuffers::create(model.pipeline->baseAttributeBinding, vertex_arrays));
+    draw_commands->addChild(vsg::BindIndexBuffer::create(vertex_data->indices));
+    draw_commands->addChild(vsg::DrawIndexed::create(vertex_data->indices->size(), 1, 0, 0, 0));
 
     if (texture_data)
     {
-        pipeline->assignTexture("diffuseMap", texture_data);
+        model.show();
     }
 
-    pipeline->init();
+    model.pipeline->init();
 
     auto state_group = vsg::StateGroup::create();
-    pipeline->copyTo(state_group);
+    model.pipeline->copyTo(state_group);
     state_group->addChild(draw_commands);
 
-    auto matrix_transform = vsg::MatrixTransform::create();
-    matrix_transform->addChild(state_group);
+    model.transform = vsg::MatrixTransform::create();
+    model.transform->addChild(state_group);
 
-    return matrix_transform;
+    models.push_back(model);
+
+    return true;
 }
 
+//------------------------------------------------------------------------------
 
 Application::Application(int* argc, char** argv)
     : arguments(argc, argv)
@@ -100,162 +135,270 @@ void Application::initialize_options()
 
 void Application::initialize_scene_graph()
 {
+    const std::string route_path = "../routes/konotop-suchinichi";
+
     scene_graph = vsg::Group::create();
 
-    load_objects_ref();
-    load_route_map();
+    load_objects_ref(route_path);
+    load_route_map(route_path);
     add_models_to_scene_graph();
 
     scene_graph->accept(compute_bounds);
 }
 
-void Application::load_objects_ref()
+void Application::load_objects_ref(const std::string& route_path)
 {
+    std::set<std::string> invalid_textures;
+    bool mipmap = false;
+    bool smooth = false;
+
     std::ifstream file(route_path + "/objects.ref");
-    std::string str;
+    std::string line;
 
-    while (std::getline(file, str))
+    while (std::getline(file, line))
     {
-        if (str.empty() || str[0] == ';' || str[0] == '[' || str[0] == ':')
+        if (line.empty() || line[0] == ';' || line[0] == ':')
         {
             continue;
         }
-
-        std::istringstream stream(str);
-        std::string name, model_path, texture_path;
-        stream >> name >> model_path >> texture_path;
-
-        model_path = route_path + model_path;
-        texture_path = route_path + texture_path;
-
-        model_paths_map.insert({name, ModelPaths{model_path, texture_path}});
-
-        if (texture_map.find(texture_path) != texture_map.end())
+        else if (line == "[mipmap]")
         {
-            continue;
+            mipmap = true;
         }
-
-        auto texture_data = vsg::read_cast<vsg::Data>(texture_path, options);
-        if (!texture_data)
+        else if (line == "[not_mipmap]")
         {
-            std::cerr << "Failed to read texture file \"" << texture_path << "\"\n";
-            continue;
+            mipmap = false;
         }
+        else if (line == "[smooth]")
+        {
+            smooth = true;
+        }
+        else if (line == "[not_smooth]")
+        {
+            smooth = false;
+        }
+        else
+        {
+            std::istringstream stream(line);
+            std::string label, model_path, texture_path;
+            stream >> label >> model_path >> texture_path;
 
-        texture_map.insert({texture_path, texture_data});
+            model_path = route_path + model_path;
+            texture_path = route_path + texture_path;
+
+            ObjectRef object_ref;
+            object_ref.label = label;
+            object_ref.model_path = model_path;
+            object_ref.texture_path = texture_path;
+            object_ref.mipmap = mipmap;
+            object_ref.smooth = smooth;
+            objects_ref.push_back(object_ref);
+
+            bool texture_already_loaded = (texture_map.find(texture_path) != texture_map.end());
+            if (texture_already_loaded)
+            {
+                continue;
+            }
+
+            bool texture_is_invalid = (invalid_textures.find(texture_path) != invalid_textures.end());
+            if (texture_is_invalid)
+            {
+                texture_map.insert({texture_path, {}});
+
+                continue;
+            }
+
+            auto texture_data = vsg::read_cast<vsg::Data>(texture_path, options);
+            if (!texture_data)
+            {
+                invalid_textures.insert(texture_path);
+                std::cerr << "Failed to read \"" << texture_path << "\"\n";
+                texture_map.insert({texture_path, {}});
+            }
+            else
+            {
+                texture_map.insert({texture_path, texture_data});
+            }
+        }
     }
+
+    //--------------------------------------------------------------------------
+    std::ofstream temp1("../temp1.txt");
+    const size_t length = objects_ref.size();
+    for (size_t i = 0; i < length; ++i)
+    {
+        ObjectRef& object_ref = objects_ref[i];
+        temp1 << "Object " << i << ":\n";
+        temp1 << "    label:        " << object_ref.label << '\n';
+        temp1 << "    model_path:   " << object_ref.model_path << '\n';
+        temp1 << "    texture_path: " << object_ref.texture_path << '\n';
+        temp1 << "    mipmap:       " << object_ref.mipmap << '\n';
+        temp1 << "    smooth:       " << object_ref.smooth << '\n';
+        temp1 << '\n';
+    }
+    temp1.close();
+
+    std::ofstream temp2("../temp2.txt");
+    size_t i = 0;
+    for (auto& [texture_path, texture_data] : texture_map)
+    {
+        temp2 << "Texture " << i++ << ":\n";
+        temp2 << "    path: " << texture_path << '\n';
+        temp2 << "    data: " << texture_data << '\n';
+        temp2 << '\n';
+    }
+    temp2.close();
+    //--------------------------------------------------------------------------
 }
 
-void Application::load_route_map()
+void Application::load_route_map(const std::string& route_path)
 {
     std::ifstream file(route_path + "/route1.map");
-    std::string str;
+    std::string line;
 
-    while (std::getline(file, str))
+    while (std::getline(file, line))
     {
         while (true)
         {
-            auto CR_pos = str.find('\r');
+            auto CR_pos = line.find('\r');
             if (CR_pos == std::string::npos)
             {
                 break;
             }
-            str.erase(CR_pos);
+            line.erase(CR_pos);
         }
 
-        if (str.empty() || str.back() != ';')
+        if (line.empty() || line.back() != ';' || line[0] == ',')
         {
             continue;
         }
+        else
+        {
+            line.pop_back();
+            std::replace(line.begin(), line.end(), ',', ' ');
 
-        str.pop_back();
-        std::replace(str.begin(), str.end(), ',', ' ');
+            std::istringstream stream(line);
+            std::string label;
+            vsg::dvec3 translation, rotation;
+            stream >> label >> translation >> rotation;
 
-        std::stringstream stream(str);
+            rotation.x = vsg::radians(rotation.x);
+            rotation.y = vsg::radians(rotation.y);
+            rotation.z = vsg::radians(rotation.z);
 
-        std::string name;
-        double tx, ty, tz, rx, ry, rz;
-        stream >> name >> tx >> ty >> tz >> rx >> ry >> rz;
+            ObjectTransformation object_transformation;
+            object_transformation.label = label;
+            object_transformation.translation = translation;
+            object_transformation.rotation = rotation;
 
-        rx = vsg::radians(rx);
-        ry = vsg::radians(ry);
-        rz = vsg::radians(rz);
-
-        vsg::dvec3 translation = vsg::dvec3(tx, ty, tz);
-        vsg::dvec3 rotation = vsg::dvec3(rx, ry, rz);
-
-        model_transformations_map.insert({name, ModelTransformations{translation, rotation}});
+            object_transformations.push_back(object_transformation);
+        }
     }
+
+    //--------------------------------------------------------------------------
+    std::ofstream temp3("../temp3.txt");
+    const size_t length = object_transformations.size();
+    for (size_t i = 0; i < length; ++i)
+    {
+        ObjectTransformation& transformation = object_transformations[i];
+        temp3 << "Object transformation " << i << ":\n";
+        temp3 << "    label:       " << transformation.label << '\n';
+        temp3 << "    translation: " << transformation.translation << '\n';
+        temp3 << "    rotation:    " << transformation.rotation << '\n';
+        temp3 << '\n';
+    }
+    temp3.close();
+    //--------------------------------------------------------------------------
 }
 
 void Application::add_models_to_scene_graph()
 {
     vsg::LoadPagedLOD load_paged_lod(camera);
 
-    for (auto& model_transformations_pair : model_transformations_map)
+    for (const ObjectTransformation& object_transformation : object_transformations)
     {
-        const std::string& name = model_transformations_pair.first;
-        if (model_paths_map.find(name) == model_paths_map.end())
+        const ObjectRef* object_ref = nullptr;
+        for (const ObjectRef& ref : objects_ref)
+        {
+            if (ref.label == object_transformation.label)
+            {
+                object_ref = &ref;
+            }
+        }
+
+        if (!object_ref)
         {
             continue;
         }
 
-        auto& model_paths = model_paths_map.find(name)->second;
-        auto& model_transformation = model_transformations_pair.second;
-
-        auto model_data = vsg::read_cast<ModelData>(model_paths.model_path, options);
+        auto model_data = vsg::read_cast<ModelData>(object_ref->model_path, options);
         if (!model_data)
         {
             continue;
         }
 
         vsg::ref_ptr<vsg::Data> texture_data;
-        if (texture_map.find(model_paths.texture_path) != texture_map.end())
+        if (texture_map.find(object_ref->texture_path) != texture_map.end())
         {
-            texture_data = texture_map.at(model_paths.texture_path);
+            texture_data = texture_map.at(object_ref->texture_path);
         }
 
-        auto model = Model(model_data, texture_data, options);
-        if (!model)
+        if (!add_model(model_data, texture_data, options))
         {
             continue;
         }
 
-        const auto& rotation = model_transformation.rotation;
+        auto model = models.back();
 
-        auto m1 = vsg::translate(model_transformation.translation);
-        auto m2 = vsg::rotate(-rotation.z, vsg::dvec3(0.0f, 0.0f, 1.0f));
-        auto m3 = vsg::rotate(-rotation.x, vsg::dvec3(1.0f, 0.0f, 0.0f));
-        auto m4 = vsg::rotate(-rotation.y, vsg::dvec3(0.0f, 1.0f, 0.0f));
-        model->matrix = m1 * m2 * m3 * m4;
+        if (!add_model(model_data, {}, options))
+        {
+            continue;
+        }
 
-        auto paged_lod = vsg::PagedLOD::create();
-        paged_lod->options = options;
-        paged_lod->children[0].minimumScreenHeightRatio = 1.0;
-        paged_lod->children[0].node = model;
+        auto model2 = models.back();
+
+        const vsg::dvec3& translation = object_transformation.translation;
+        const vsg::dvec3& rotation = object_transformation.rotation;
+
+        vsg::dmat4 m1 = vsg::translate(translation);
+        vsg::dmat4 m2 = vsg::rotate(-rotation.z, vsg::dvec3(0.0f, 0.0f, 1.0f));
+        vsg::dmat4 m3 = vsg::rotate(-rotation.x, vsg::dvec3(1.0f, 0.0f, 0.0f));
+        vsg::dmat4 m4 = vsg::rotate(-rotation.y, vsg::dvec3(0.0f, 1.0f, 0.0f));
+        model.transform->matrix = m1 * m2 * m3 * m4;
+        model2.transform->matrix = m1 * m2 * m3 * m4;
+
+        model.paged_lod = vsg::PagedLOD::create();
+        model.paged_lod->children[0].minimumScreenHeightRatio = 1.0;
+        model.paged_lod->children[0].node = model.transform;
+        model.paged_lod->children[1].minimumScreenHeightRatio = 0.0;
+        model.paged_lod->children[1].node = model2.transform;
 
         vsg::ComputeBounds test_bounds;
-        model->accept(test_bounds);
+        model.transform->accept(test_bounds);
         const vsg::dbox& bounds = test_bounds.bounds;
         vsg::dvec3 center = (bounds.min + bounds.max) * 0.5;
         double radius = vsg::length(bounds.max - bounds.min) * 0.6;
 
-        paged_lod->bound = vsg::dsphere(center, radius);
+        model.paged_lod->bound = vsg::dsphere(center, radius);
 
-        load_paged_lod.apply(*(paged_lod.get()));
+        load_paged_lod.apply(*model.paged_lod.get());
 
-        scene_graph->addChild(paged_lod);
-        // std::cout << scene_graph->children.size() << '\n';
-        if (scene_graph->children.size() > 700)
+        scene_graph->addChild(model.paged_lod);
+
+        if (scene_graph->children.size() > 500)
         {
             break;
         }
     }
+
     scene_graph->accept(load_paged_lod);
 
+    std::cout << "Loaded " << scene_graph->children.size() << " children\n";
+
+    models.clear();
+    object_transformations.clear();
     texture_map.clear();
-    model_transformations_map.clear();
-    model_paths_map.clear();
+    objects_ref.clear();
 }
 
 void Application::initialize_window()
@@ -277,11 +420,8 @@ void Application::initialize_camera()
     const double aspect_ratio = static_cast<double>(extent.width) / static_cast<double>(extent.height);
     constexpr double near_far_ratio = 0.001;
 
-    // vsg::dvec3 center = (bounds.min + bounds.max) * 0.5;
-    // double radius = vsg::length(bounds.max - bounds.min) * 0.6;
     vsg::dvec3 center = vsg::dvec3(0.0, 0.0, 0.0);
     double radius = 1000.0;
-    // std::cout << center << ' ' << radius << '\n';
 
     vsg::dvec3 eye = center + vsg::dvec3(100.0, 100.0, 100.0);
     vsg::dvec3 up = vsg::dvec3(0.0, 0.0, 1.0);
@@ -303,7 +443,7 @@ void Application::initialize_viewer()
     viewer = vsg::Viewer::create();
     viewer->addWindow(window);
     viewer->assignRecordAndSubmitTaskAndPresentation({command_graph});
-    viewer->compile();
     viewer->addEventHandler(vsg::CloseHandler::create(viewer));
     viewer->addEventHandler(vsg::Trackball::create(camera));
+    viewer->compile();
 }

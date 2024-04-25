@@ -11,9 +11,11 @@ add_executable(test_vsg src/main.cpp
     include/Application.h
     include/DMD_Reader.h
     include/Mesh.h
+    include/stb_image.h
 
     src/Application.cpp
     src/DMD_Reader.cpp
+    src/stb_image.cpp
 )
 
 target_include_directories(test_vsg PRIVATE include)

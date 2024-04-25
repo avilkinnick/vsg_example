@@ -4,14 +4,18 @@
 #include <vsg/all.h>
 #include <vsgXchange/all.h>
 
-struct ModelPaths
+struct ObjectRef
 {
+    std::string label;
     std::string model_path;
     std::string texture_path;
+    bool mipmap;
+    bool smooth;
 };
 
-struct ModelTransformations
+struct ObjectTransformation
 {
+    std::string label;
     vsg::dvec3 translation;
     vsg::dvec3 rotation;
 };
@@ -31,8 +35,9 @@ private:
 
     void initialize_scene_graph();
 
-    void load_objects_ref();
-    void load_route_map();
+    void load_objects_ref(const std::string& route_path);
+    void load_objects_ref2();
+    void load_route_map(const std::string& route_path);
     void add_models_to_scene_graph();
 
     void initialize_window();
@@ -51,12 +56,9 @@ private:
     vsg::ref_ptr<vsg::CommandGraph> command_graph;
     vsg::ref_ptr<vsg::Viewer> viewer;
 
-    //--------------------------------------------------------------------
-    const std::string route_path = "../routes/konotop-suchinichi";
-    std::map<std::string, ModelPaths> model_paths_map;
-    std::map<std::string, ModelTransformations> model_transformations_map;
+    std::vector<ObjectRef> objects_ref;
     std::map<std::string, vsg::ref_ptr<vsg::Data>> texture_map;
-    //--------------------------------------------------------------------
+    std::vector<ObjectTransformation> object_transformations;
 };
 
 #endif // APPLICATION_H
