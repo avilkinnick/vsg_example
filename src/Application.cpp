@@ -6,85 +6,74 @@
 #include <stdexcept>
 
 //------------------------------------------------------------------------------
+// int zxc = 0;
 
-class Model
-{
-public:
-    vsg::ref_ptr<vsg::Data> texture_data;
-    vsg::ref_ptr<vsg::GraphicsPipelineConfigurator> pipeline;
-    vsg::ref_ptr<vsg::MatrixTransform> transform;
-    vsg::ref_ptr<vsg::PagedLOD> paged_lod;
-    bool visible = false;
+// struct Merge : public vsg::Inherit<vsg::Operation, Merge>
+// {
+//     Merge(vsg::observer_ptr<vsg::Viewer> in_viewer, vsg::ref_ptr<vsg::Group> in_attachmentPoint, vsg::ref_ptr<vsg::Node> in_node, const vsg::CompileResult& in_compileResult):
+//         viewer(in_viewer),
+//         attachmentPoint(in_attachmentPoint),
+//         node(in_node),
+//         compileResult(in_compileResult) {}
 
-    void show()
-    {
-        if (!visible)
-        {
-            pipeline->assignTexture("diffuseMap", texture_data);
-            visible = true;
-        }
-    }
+//     vsg::observer_ptr<vsg::Viewer> viewer;
+//     vsg::ref_ptr<vsg::Group> attachmentPoint;
+//     vsg::ref_ptr<vsg::Node> node;
+//     vsg::CompileResult compileResult;
 
-    void hide()
-    {
-        if (visible)
-        {
-            pipeline->assignTexture("diffuseMap");
-            visible = false;
-        }
-    }
-};
+//     void run() override
+//     {
+//         std::cout << zxc++ << '\n';
 
-std::vector<Model> models;
+//         vsg::ref_ptr<vsg::Viewer> ref_viewer = viewer;
+//         if (ref_viewer)
+//         {
+//             updateViewer(*ref_viewer, compileResult);
+//         }
 
-bool add_model(vsg::ref_ptr<ModelData> vertex_data, vsg::ref_ptr<vsg::Data> texture_data, vsg::ref_ptr<const vsg::Options> options = {})
-{
-    if (!vertex_data)
-    {
-        return false;
-    }
+//         attachmentPoint->addChild(node);
+//     }
+// };
 
-    static auto shader_set = vsg::createPhongShaderSet(options);
-    if (!shader_set)
-    {
-        std::cerr << "Failed to create Phong shader set!\n";
-        return false;
-    }
+// struct LoadOperation : public vsg::Inherit<vsg::Operation, LoadOperation>
+// {
+//     LoadOperation(vsg::ref_ptr<vsg::Viewer> in_viewer, vsg::ref_ptr<vsg::Group> in_attachmentPoint, const vsg::Path& in_filename, vsg::ref_ptr<vsg::Options> in_options) :
+//         viewer(in_viewer),
+//         attachmentPoint(in_attachmentPoint),
+//         filename(in_filename),
+//         options(in_options) {}
 
-    Model model;
+//     vsg::observer_ptr<vsg::Viewer> viewer;
+//     vsg::ref_ptr<vsg::Group> attachmentPoint;
+//     vsg::Path filename;
+//     vsg::ref_ptr<vsg::Options> options;
 
-    model.texture_data = texture_data;
-    model.pipeline = vsg::GraphicsPipelineConfigurator::create(shader_set);
+//     void run() override
+//     {
+//         vsg::ref_ptr<vsg::Viewer> ref_viewer = viewer;
 
-    vsg::DataList vertex_arrays;
-    model.pipeline->assignArray(vertex_arrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, vertex_data->vertices);
-    model.pipeline->assignArray(vertex_arrays, "vsg_Normal", VK_VERTEX_INPUT_RATE_VERTEX, vertex_data->normals);
-    model.pipeline->assignArray(vertex_arrays, "vsg_TexCoord0", VK_VERTEX_INPUT_RATE_VERTEX, vertex_data->tex_coords);
-    model.pipeline->assignArray(vertex_arrays, "vsg_Color", VK_VERTEX_INPUT_RATE_VERTEX, vertex_data->colors);
+//         auto model = vsg::read_cast<vsg::StateGroup>(filename, options);
+//         if (!model)
+//         {
+//             return;
+//         }
 
-    auto draw_commands = vsg::Commands::create();
-    draw_commands->addChild(vsg::BindVertexBuffers::create(model.pipeline->baseAttributeBinding, vertex_arrays));
-    draw_commands->addChild(vsg::BindIndexBuffer::create(vertex_data->indices));
-    draw_commands->addChild(vsg::DrawIndexed::create(vertex_data->indices->size(), 1, 0, 0, 0));
+//         vsg::ComputeBounds bounds;
+//         model->accept(bounds);
 
-    if (texture_data)
-    {
-        model.show();
-    }
+//         vsg::dvec3 center = (bounds.bounds.min + bounds.bounds.min) * 0.5;
+//         double radius = vsg::length(bounds.bounds.max - bounds.bounds.min);
 
-    model.pipeline->init();
+//         auto paged_lod = vsg::PagedLOD::create();
+//         paged_lod->options = options;
+//         paged_lod->filename = filename;
+//         paged_lod->children[0].minimumScreenHeightRatio = 0.5;
+//         paged_lod->bound = vsg::dsphere(center, radius);
 
-    auto state_group = vsg::StateGroup::create();
-    model.pipeline->copyTo(state_group);
-    state_group->addChild(draw_commands);
-
-    model.transform = vsg::MatrixTransform::create();
-    model.transform->addChild(state_group);
-
-    models.push_back(model);
-
-    return true;
-}
+//         auto result = ref_viewer->compileManager->compile(paged_lod);
+//         if (result) ref_viewer->addUpdateOperation(Merge::create(viewer, attachmentPoint, paged_lod, result));
+//     }
+// };
 
 //------------------------------------------------------------------------------
 
@@ -94,9 +83,13 @@ Application::Application(int* argc, char** argv)
     if (arguments.errors())
     {
         arguments.writeErrorMessages(std::cerr);
-
         throw std::runtime_error("Failed to read arguments!");
     }
+}
+
+Application::~Application()
+{
+    // load_threads->stop();
 }
 
 void Application::run()
@@ -141,9 +134,6 @@ void Application::initialize_scene_graph()
 
     load_objects_ref(route_path);
     load_route_map(route_path);
-    add_models_to_scene_graph();
-
-    scene_graph->accept(compute_bounds);
 }
 
 void Application::load_objects_ref(const std::string& route_path)
@@ -193,62 +183,8 @@ void Application::load_objects_ref(const std::string& route_path)
             object_ref.mipmap = mipmap;
             object_ref.smooth = smooth;
             objects_ref.push_back(object_ref);
-
-            bool texture_already_loaded = (texture_map.find(texture_path) != texture_map.end());
-            if (texture_already_loaded)
-            {
-                continue;
-            }
-
-            bool texture_is_invalid = (invalid_textures.find(texture_path) != invalid_textures.end());
-            if (texture_is_invalid)
-            {
-                texture_map.insert({texture_path, {}});
-
-                continue;
-            }
-
-            auto texture_data = vsg::read_cast<vsg::Data>(texture_path, options);
-            if (!texture_data)
-            {
-                invalid_textures.insert(texture_path);
-                std::cerr << "Failed to read \"" << texture_path << "\"\n";
-                texture_map.insert({texture_path, {}});
-            }
-            else
-            {
-                texture_map.insert({texture_path, texture_data});
-            }
         }
     }
-
-    //--------------------------------------------------------------------------
-    std::ofstream temp1("../temp1.txt");
-    const size_t length = objects_ref.size();
-    for (size_t i = 0; i < length; ++i)
-    {
-        ObjectRef& object_ref = objects_ref[i];
-        temp1 << "Object " << i << ":\n";
-        temp1 << "    label:        " << object_ref.label << '\n';
-        temp1 << "    model_path:   " << object_ref.model_path << '\n';
-        temp1 << "    texture_path: " << object_ref.texture_path << '\n';
-        temp1 << "    mipmap:       " << object_ref.mipmap << '\n';
-        temp1 << "    smooth:       " << object_ref.smooth << '\n';
-        temp1 << '\n';
-    }
-    temp1.close();
-
-    std::ofstream temp2("../temp2.txt");
-    size_t i = 0;
-    for (auto& [texture_path, texture_data] : texture_map)
-    {
-        temp2 << "Texture " << i++ << ":\n";
-        temp2 << "    path: " << texture_path << '\n';
-        temp2 << "    data: " << texture_data << '\n';
-        temp2 << '\n';
-    }
-    temp2.close();
-    //--------------------------------------------------------------------------
 }
 
 void Application::load_route_map(const std::string& route_path)
@@ -287,124 +223,33 @@ void Application::load_route_map(const std::string& route_path)
             rotation.z = vsg::radians(rotation.z);
 
             ObjectTransformation object_transformation;
-            object_transformation.label = label;
+            object_transformation.reference = nullptr;
             object_transformation.translation = translation;
             object_transformation.rotation = rotation;
 
-            object_transformations.push_back(object_transformation);
-        }
-    }
-
-    //--------------------------------------------------------------------------
-    std::ofstream temp3("../temp3.txt");
-    const size_t length = object_transformations.size();
-    for (size_t i = 0; i < length; ++i)
-    {
-        ObjectTransformation& transformation = object_transformations[i];
-        temp3 << "Object transformation " << i << ":\n";
-        temp3 << "    label:       " << transformation.label << '\n';
-        temp3 << "    translation: " << transformation.translation << '\n';
-        temp3 << "    rotation:    " << transformation.rotation << '\n';
-        temp3 << '\n';
-    }
-    temp3.close();
-    //--------------------------------------------------------------------------
-}
-
-void Application::add_models_to_scene_graph()
-{
-    vsg::LoadPagedLOD load_paged_lod(camera);
-
-    for (const ObjectTransformation& object_transformation : object_transformations)
-    {
-        const ObjectRef* object_ref = nullptr;
-        for (const ObjectRef& ref : objects_ref)
-        {
-            if (ref.label == object_transformation.label)
+            for (ObjectRef& ref : objects_ref)
             {
-                object_ref = &ref;
+                if (ref.label == label)
+                {
+                    object_transformation.reference = &ref;
+                    break;
+                }
+            }
+
+            if (object_transformation.reference != nullptr)
+            {
+                object_transformations.push_back(object_transformation);
             }
         }
-
-        if (!object_ref)
-        {
-            continue;
-        }
-
-        auto model_data = vsg::read_cast<ModelData>(object_ref->model_path, options);
-        if (!model_data)
-        {
-            continue;
-        }
-
-        vsg::ref_ptr<vsg::Data> texture_data;
-        if (texture_map.find(object_ref->texture_path) != texture_map.end())
-        {
-            texture_data = texture_map.at(object_ref->texture_path);
-        }
-
-        if (!add_model(model_data, texture_data, options))
-        {
-            continue;
-        }
-
-        auto model = models.back();
-
-        if (!add_model(model_data, {}, options))
-        {
-            continue;
-        }
-
-        auto model2 = models.back();
-
-        const vsg::dvec3& translation = object_transformation.translation;
-        const vsg::dvec3& rotation = object_transformation.rotation;
-
-        vsg::dmat4 m1 = vsg::translate(translation);
-        vsg::dmat4 m2 = vsg::rotate(-rotation.z, vsg::dvec3(0.0f, 0.0f, 1.0f));
-        vsg::dmat4 m3 = vsg::rotate(-rotation.x, vsg::dvec3(1.0f, 0.0f, 0.0f));
-        vsg::dmat4 m4 = vsg::rotate(-rotation.y, vsg::dvec3(0.0f, 1.0f, 0.0f));
-        model.transform->matrix = m1 * m2 * m3 * m4;
-        model2.transform->matrix = m1 * m2 * m3 * m4;
-
-        model.paged_lod = vsg::PagedLOD::create();
-        model.paged_lod->children[0].minimumScreenHeightRatio = 1.0;
-        model.paged_lod->children[0].node = model.transform;
-        model.paged_lod->children[1].minimumScreenHeightRatio = 0.0;
-        model.paged_lod->children[1].node = model2.transform;
-
-        vsg::ComputeBounds test_bounds;
-        model.transform->accept(test_bounds);
-        const vsg::dbox& bounds = test_bounds.bounds;
-        vsg::dvec3 center = (bounds.min + bounds.max) * 0.5;
-        double radius = vsg::length(bounds.max - bounds.min) * 0.6;
-
-        model.paged_lod->bound = vsg::dsphere(center, radius);
-
-        load_paged_lod.apply(*model.paged_lod.get());
-
-        scene_graph->addChild(model.paged_lod);
-
-        if (scene_graph->children.size() > 500)
-        {
-            break;
-        }
     }
-
-    scene_graph->accept(load_paged_lod);
-
-    std::cout << "Loaded " << scene_graph->children.size() << " children\n";
-
-    models.clear();
-    object_transformations.clear();
-    texture_map.clear();
-    objects_ref.clear();
 }
 
 void Application::initialize_window()
 {
-    window = vsg::Window::create(vsg::WindowTraits::create());
+    auto window_traits = vsg::WindowTraits::create();
+    window_traits->debugLayer = true;
 
+    window = vsg::Window::create(window_traits);
     if (!window)
     {
         throw std::runtime_error("Failed to create window!");
@@ -413,7 +258,6 @@ void Application::initialize_window()
 
 void Application::initialize_camera()
 {
-    const vsg::dbox& bounds = compute_bounds.bounds;
     const VkExtent2D& extent = window->extent2D();
 
     constexpr double FOV = 60.0;
@@ -440,10 +284,88 @@ void Application::initialize_command_graph()
 
 void Application::initialize_viewer()
 {
+    vsg::LoadPagedLOD load_paged_lod(camera);
+    scene_graph->accept(load_paged_lod);
+
+    int zxc = 0;
+    for (const ObjectTransformation& transformation : object_transformations)
+    {
+        std::cout << zxc++ << '\n';
+
+        const std::string paths = transformation.reference->model_path + transformation.reference->texture_path;
+
+        const vsg::dvec3& translation = transformation.translation;
+        const vsg::dvec3& rotation = transformation.rotation;
+
+        vsg::dmat4 m1 = vsg::translate(translation);
+        vsg::dmat4 m2 = vsg::rotate(-rotation.z, vsg::dvec3(0.0f, 0.0f, 1.0f));
+        vsg::dmat4 m3 = vsg::rotate(-rotation.x, vsg::dvec3(1.0f, 0.0f, 0.0f));
+        vsg::dmat4 m4 = vsg::rotate(-rotation.y, vsg::dvec3(0.0f, 1.0f, 0.0f));
+
+        auto model = vsg::read_cast<vsg::StateGroup>(paths, options);
+        if (!model)
+        {
+            continue;
+        }
+
+        // auto test_matrix = vsg::MatrixTransform::create();
+        // test_matrix->matrix = m1 * m2 * m3 * m4;
+        // test_matrix->addChild(model);
+
+        vsg::ComputeBounds bounds;
+        model->accept(bounds);
+
+        vsg::dvec3 center = (bounds.bounds.min + bounds.bounds.max) * 0.5;
+        double radius = vsg::length(bounds.bounds.max - bounds.bounds.min);
+
+        // std::cout << "center = " << center << '\n';
+        // std::cout << "radius = " << radius << '\n';
+
+        auto paged_lod = vsg::PagedLOD::create();
+        paged_lod->options = options;
+        paged_lod->filename = paths;
+        paged_lod->children[0].minimumScreenHeightRatio = 0.5;
+        paged_lod->bound = vsg::dsphere(center, radius);
+
+        auto matrix_transform = vsg::MatrixTransform::create();
+        matrix_transform->matrix = m1 * m2 * m3 * m4;
+        matrix_transform->addChild(paged_lod);
+
+        scene_graph->addChild(matrix_transform);
+    }
+
+
+
     viewer = vsg::Viewer::create();
     viewer->addWindow(window);
     viewer->assignRecordAndSubmitTaskAndPresentation({command_graph});
     viewer->addEventHandler(vsg::CloseHandler::create(viewer));
     viewer->addEventHandler(vsg::Trackball::create(camera));
-    viewer->compile();
+
+    auto resource_hints = vsg::ResourceHints::create();
+    resource_hints->numDescriptorSets = 2;
+
+    viewer->compile(resource_hints);
+    // load_threads = vsg::OperationThreads::create(16, viewer->status);
+    // vsg::observer_ptr<vsg::Viewer> observer_viewer(viewer);
+
+    // for (const ObjectTransformation& transformation : object_transformations)
+    // {
+    //     const std::string paths = transformation.reference->model_path + transformation.reference->texture_path;
+
+    //     const vsg::dvec3& translation = transformation.translation;
+    //     const vsg::dvec3& rotation = transformation.rotation;
+
+    //     vsg::dmat4 m1 = vsg::translate(translation);
+    //     vsg::dmat4 m2 = vsg::rotate(-rotation.z, vsg::dvec3(0.0f, 0.0f, 1.0f));
+    //     vsg::dmat4 m3 = vsg::rotate(-rotation.x, vsg::dvec3(1.0f, 0.0f, 0.0f));
+    //     vsg::dmat4 m4 = vsg::rotate(-rotation.y, vsg::dvec3(0.0f, 1.0f, 0.0f));
+
+    //     auto matrix_transform = vsg::MatrixTransform::create();
+    //     matrix_transform->matrix = m1 * m2 * m3 * m4;
+
+    //     scene_graph->addChild(matrix_transform);
+
+    //     load_threads->add(LoadOperation::create(observer_viewer, matrix_transform, paths, options));
+    // }
 }

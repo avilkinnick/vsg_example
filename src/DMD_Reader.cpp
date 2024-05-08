@@ -5,22 +5,109 @@
 #include <iostream>
 #include <set>
 
-vsg::ref_ptr<vsg::Object> DMD_Reader::read(
-    const vsg::Path& filename,
-    vsg::ref_ptr<const vsg::Options> options
-) const
-{
-    vsg::Path found_filename = vsg::findFile(filename, options);
+std::map<vsg::Path, vsg::ref_ptr<ModelData>> DMD_Reader::models;
+std::map<vsg::Path, vsg::ref_ptr<vsg::Data>> DMD_Reader::textures;
+// std::map<vsg::Path, vsg::ref_ptr<vsg::GraphicsPipelineConfigurator>> DMD_Reader::pipelines;
+// std::map<vsg::Path, vsg::ref_ptr<vsg::Command>> DMD_Reader::commands;
 
-    if (vsg::fileExtension(filename) != ".dmd"
-        || !found_filename)
+vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_ptr<const vsg::Options> options) const
+{
+    std::cout << filename << '\n';
+    // vsg::ref_ptr<vsg::GraphicsPipelineConfigurator> pipeline;
+    // if (pipelines.find(filename) != pipelines.end())
+    // {
+    //     pipeline = pipelines[filename];
+
+    //     auto state_group = vsg::StateGroup::create();
+    //     pipeline->copyTo(state_group);
+    //     state_group->addChild(commands[filename]);
+
+    //     return state_group;
+    // }
+
+    const size_t dot_dmd_pos = filename.find(".dmd");
+    if (dot_dmd_pos == filename.npos)
     {
         return {};
     }
 
-    std::ifstream stream(filename.string());
-    std::string str;
+    const vsg::Path model_path = filename.substr(0, dot_dmd_pos + 4);
+    const vsg::Path texture_path = filename.substr(dot_dmd_pos + 4, filename.size() - model_path.size());
 
+    vsg::ref_ptr<ModelData> model_data;
+    if (models.find(model_path) != models.end())
+    {
+        model_data = models[model_path];
+    }
+    else
+    {
+        const vsg::Path model_file = vsg::findFile(model_path, options);
+        if (!model_file || (vsg::fileExtension(model_file) != ".dmd"))
+        {
+            return {};
+        }
+
+        model_data = load_model(model_file);
+        if (!model_data)
+        {
+            return {};
+        }
+
+        models.insert({model_path, model_data});
+    }
+
+    vsg::ref_ptr<vsg::Data> texture_data;
+    if (textures.find(texture_path) != textures.end())
+    {
+        texture_data = textures[texture_path];
+    }
+    else
+    {
+        const vsg::Path texture_file = vsg::findFile(texture_path, options);
+        const auto texture_data = vsg::read_cast<vsg::Data>(texture_file, options);
+        textures.insert({texture_path, texture_data});
+    }
+
+    auto shader_set = vsg::createFlatShadedShaderSet(options);
+    if (!shader_set)
+    {
+        std::cerr << "Failed to create flat shader set!\n";
+        return {};
+    }
+
+    auto pipeline = vsg::GraphicsPipelineConfigurator::create(shader_set);
+
+    vsg::DataList vertex_arrays;
+    pipeline->assignArray(vertex_arrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, model_data->vertices);
+    pipeline->assignArray(vertex_arrays, "vsg_Normal", VK_VERTEX_INPUT_RATE_VERTEX, model_data->normals);
+    pipeline->assignArray(vertex_arrays, "vsg_TexCoord0", VK_VERTEX_INPUT_RATE_VERTEX, model_data->tex_coords);
+    pipeline->assignArray(vertex_arrays, "vsg_Color", VK_VERTEX_INPUT_RATE_VERTEX, model_data->colors);
+
+    auto draw_commands = vsg::Commands::create();
+    draw_commands->addChild(vsg::BindVertexBuffers::create(pipeline->baseAttributeBinding, vertex_arrays));
+    draw_commands->addChild(vsg::BindIndexBuffer::create(model_data->indices));
+    draw_commands->addChild(vsg::DrawIndexed::create(model_data->indices->size(), 1, 0, 0, 0));
+
+    if (texture_data)
+    {
+        static auto sampler = vsg::Sampler::create();
+        pipeline->assignTexture("diffuseMap", texture_data, sampler);
+    }
+
+    pipeline->init();
+
+    // pipelines.insert({filename, pipeline});
+    // commands.insert({filename, draw_commands});
+
+    auto state_group = vsg::StateGroup::create();
+    pipeline->copyTo(state_group);
+    state_group->addChild(draw_commands);
+
+    return state_group;
+}
+
+vsg::ref_ptr<ModelData> DMD_Reader::load_model(const vsg::Path& model_file) const
+{
     bool object_added = false;
     bool numverts_readed = false;
     bool vertices_readed = false;
@@ -29,7 +116,6 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(
     bool tverts_readed = false;
     bool tfaces_readed = false;
 
-    vsg::ref_ptr<vsg::MatrixTransform> model;
     std::vector<Mesh> meshes;
     Mesh* current_mesh = nullptr;
 
@@ -41,11 +127,14 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(
     std::size_t indices_count = 0;
     std::size_t temp_vertices_count = 0;
 
-    while (std::getline(stream, str))
-    {
-        remove_CR_symbols(str);
+    std::ifstream file(model_file.string());
+    std::string line;
 
-        if (str == "New object" && !object_added)
+    while (std::getline(file, line))
+    {
+        remove_carriage_return_symbols(line);
+
+        if (line == "New object" && !object_added)
         {
             current_mesh = &(meshes.emplace_back(Mesh()));
 
@@ -58,9 +147,9 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(
 
             object_added = true;
         }
-        else if (str == "numverts numfaces" && !numverts_readed)
+        else if (line == "numverts numfaces" && !numverts_readed)
         {
-            stream >> temp_vertices_count >> faces_count;
+            file >> temp_vertices_count >> faces_count;
             indices_count = faces_count * 3;
 
             temp_vertices = vsg::vec3Array::create(temp_vertices_count);
@@ -68,28 +157,28 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(
 
             numverts_readed = true;
         }
-        else if (str == "Mesh vertices:" && !vertices_readed)
+        else if (line == "Mesh vertices:" && !vertices_readed)
         {
             for (auto& tempVertex : *temp_vertices)
             {
-                stream >> tempVertex;
+                file >> tempVertex;
             }
 
             vertices_readed = true;
         }
-        else if (str == "Mesh faces:" && !faces_readed)
+        else if (line == "Mesh faces:" && !faces_readed)
         {
             for (auto& tempIndex : *temp_indices)
             {
-                stream >> tempIndex;
+                file >> tempIndex;
                 --tempIndex;
             }
 
             faces_readed = true;
         }
-        else if (str == "numtverts numtvfaces" && !numtverts_readed)
+        else if (line == "numtverts numtvfaces" && !numtverts_readed)
         {
-            stream >> vertices_count >> faces_count;
+            file >> vertices_count >> faces_count;
 
             current_mesh->vertices = vsg::vec3Array::create(vertices_count);
             current_mesh->normals = vsg::vec3Array::create(vertices_count);
@@ -104,22 +193,22 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(
 
             numtverts_readed = true;
         }
-        else if (str == "Texture vertices:" && !tverts_readed)
+        else if (line == "Texture vertices:" && !tverts_readed)
         {
             for (auto& texCoord : *current_mesh->tex_coords)
             {
-                stream >> texCoord;
+                file >> texCoord;
             }
 
             tverts_readed = true;
         }
-        else if (str == "Texture faces:" && !tfaces_readed)
+        else if (line == "Texture faces:" && !tfaces_readed)
         {
             std::set<std::size_t> processed_indices;
             for (std::size_t i = 0; i < indices_count; ++i)
             {
                 auto& index = current_mesh->indices->at(i);
-                stream >> index;
+                file >> index;
                 --index;
 
                 // Если вершина с заданным индексом еще не была обработана,
@@ -164,15 +253,11 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(
     if (!object_added || !numverts_readed || !vertices_readed || !faces_readed
         || !numtverts_readed || !tverts_readed || !tfaces_readed)
     {
-        return vsg::ref_ptr<vsg::MatrixTransform>();
+        return {};
     }
 
     temp_vertices.reset();
     temp_indices.reset();
-    vertices_count = 0;
-    faces_count = 0;
-    indices_count = 0;
-    temp_vertices_count = 0;
 
     std::size_t model_vertices_count = 0;
     std::size_t model_indices_count = 0;
@@ -219,7 +304,7 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(
     return model_data;
 }
 
-void DMD_Reader::remove_CR_symbols(std::string& str) const
+void DMD_Reader::remove_carriage_return_symbols(std::string& str) const
 {
     while (true)
     {

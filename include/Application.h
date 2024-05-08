@@ -15,7 +15,7 @@ struct ObjectRef
 
 struct ObjectTransformation
 {
-    std::string label;
+    ObjectRef* reference;
     vsg::dvec3 translation;
     vsg::dvec3 rotation;
 };
@@ -24,6 +24,7 @@ class Application
 {
 public:
     Application(int* argc, char** argv);
+    ~Application();
 
     void run();
 
@@ -36,9 +37,7 @@ private:
     void initialize_scene_graph();
 
     void load_objects_ref(const std::string& route_path);
-    void load_objects_ref2();
     void load_route_map(const std::string& route_path);
-    void add_models_to_scene_graph();
 
     void initialize_window();
     void initialize_camera();
@@ -50,14 +49,15 @@ private:
     vsg::ref_ptr<vsg::Options> options;
 
     vsg::ref_ptr<vsg::Group> scene_graph;
-    vsg::ComputeBounds compute_bounds;
+    // vsg::ComputeBounds compute_bounds;
     vsg::ref_ptr<vsg::Window> window;
     vsg::ref_ptr<vsg::Camera> camera;
     vsg::ref_ptr<vsg::CommandGraph> command_graph;
     vsg::ref_ptr<vsg::Viewer> viewer;
+    // vsg::ref_ptr<vsg::OperationThreads> load_threads;
 
     std::vector<ObjectRef> objects_ref;
-    std::map<std::string, vsg::ref_ptr<vsg::Data>> texture_map;
+
     std::vector<ObjectTransformation> object_transformations;
 };
 
