@@ -19,14 +19,15 @@ class DMD_Reader : public vsg::Inherit<vsg::ReaderWriter, DMD_Reader>
 public:
     vsg::ref_ptr<vsg::Object> read(const vsg::Path& filename, vsg::ref_ptr<const vsg::Options> options = {}) const override;
 
+    static bool models_loaded;
+
 private:
     vsg::ref_ptr<ModelData> load_model(const vsg::Path& model_file) const;
     void remove_carriage_return_symbols(std::string& str) const;
 
     static std::map<vsg::Path, vsg::ref_ptr<ModelData>> models;
     static std::map<vsg::Path, vsg::ref_ptr<vsg::Data>> textures;
-    // static std::map<vsg::Path, vsg::ref_ptr<vsg::GraphicsPipelineConfigurator>> pipelines;
-    // static std::map<vsg::Path, vsg::ref_ptr<vsg::Command>> commands;
+    static std::map<vsg::Path, vsg::ref_ptr<vsg::StateGroup>> state_groups;
 };
 
 #endif // DMD_READER_H

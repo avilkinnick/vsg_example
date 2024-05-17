@@ -5,78 +5,6 @@
 #include <iostream>
 #include <stdexcept>
 
-//------------------------------------------------------------------------------
-// int zxc = 0;
-
-// struct Merge : public vsg::Inherit<vsg::Operation, Merge>
-// {
-//     Merge(vsg::observer_ptr<vsg::Viewer> in_viewer, vsg::ref_ptr<vsg::Group> in_attachmentPoint, vsg::ref_ptr<vsg::Node> in_node, const vsg::CompileResult& in_compileResult):
-//         viewer(in_viewer),
-//         attachmentPoint(in_attachmentPoint),
-//         node(in_node),
-//         compileResult(in_compileResult) {}
-
-//     vsg::observer_ptr<vsg::Viewer> viewer;
-//     vsg::ref_ptr<vsg::Group> attachmentPoint;
-//     vsg::ref_ptr<vsg::Node> node;
-//     vsg::CompileResult compileResult;
-
-//     void run() override
-//     {
-//         std::cout << zxc++ << '\n';
-
-//         vsg::ref_ptr<vsg::Viewer> ref_viewer = viewer;
-//         if (ref_viewer)
-//         {
-//             updateViewer(*ref_viewer, compileResult);
-//         }
-
-//         attachmentPoint->addChild(node);
-//     }
-// };
-
-// struct LoadOperation : public vsg::Inherit<vsg::Operation, LoadOperation>
-// {
-//     LoadOperation(vsg::ref_ptr<vsg::Viewer> in_viewer, vsg::ref_ptr<vsg::Group> in_attachmentPoint, const vsg::Path& in_filename, vsg::ref_ptr<vsg::Options> in_options) :
-//         viewer(in_viewer),
-//         attachmentPoint(in_attachmentPoint),
-//         filename(in_filename),
-//         options(in_options) {}
-
-//     vsg::observer_ptr<vsg::Viewer> viewer;
-//     vsg::ref_ptr<vsg::Group> attachmentPoint;
-//     vsg::Path filename;
-//     vsg::ref_ptr<vsg::Options> options;
-
-//     void run() override
-//     {
-//         vsg::ref_ptr<vsg::Viewer> ref_viewer = viewer;
-
-//         auto model = vsg::read_cast<vsg::StateGroup>(filename, options);
-//         if (!model)
-//         {
-//             return;
-//         }
-
-//         vsg::ComputeBounds bounds;
-//         model->accept(bounds);
-
-//         vsg::dvec3 center = (bounds.bounds.min + bounds.bounds.min) * 0.5;
-//         double radius = vsg::length(bounds.bounds.max - bounds.bounds.min);
-
-//         auto paged_lod = vsg::PagedLOD::create();
-//         paged_lod->options = options;
-//         paged_lod->filename = filename;
-//         paged_lod->children[0].minimumScreenHeightRatio = 0.5;
-//         paged_lod->bound = vsg::dsphere(center, radius);
-
-//         auto result = ref_viewer->compileManager->compile(paged_lod);
-//         if (result) ref_viewer->addUpdateOperation(Merge::create(viewer, attachmentPoint, paged_lod, result));
-//     }
-// };
-
-//------------------------------------------------------------------------------
-
 Application::Application(int* argc, char** argv)
     : arguments(argc, argv)
 {
@@ -89,7 +17,8 @@ Application::Application(int* argc, char** argv)
 
 Application::~Application()
 {
-    // load_threads->stop();
+    // !!!
+    // std::cout << "Dtor\n";
 }
 
 void Application::run()
@@ -284,14 +213,8 @@ void Application::initialize_command_graph()
 
 void Application::initialize_viewer()
 {
-    vsg::LoadPagedLOD load_paged_lod(camera);
-    scene_graph->accept(load_paged_lod);
-
-    int zxc = 0;
     for (const ObjectTransformation& transformation : object_transformations)
     {
-        std::cout << zxc++ << '\n';
-
         const std::string paths = transformation.reference->model_path + transformation.reference->texture_path;
 
         const vsg::dvec3& translation = transformation.translation;
@@ -308,18 +231,11 @@ void Application::initialize_viewer()
             continue;
         }
 
-        // auto test_matrix = vsg::MatrixTransform::create();
-        // test_matrix->matrix = m1 * m2 * m3 * m4;
-        // test_matrix->addChild(model);
-
         vsg::ComputeBounds bounds;
         model->accept(bounds);
 
         vsg::dvec3 center = (bounds.bounds.min + bounds.bounds.max) * 0.5;
-        double radius = vsg::length(bounds.bounds.max - bounds.bounds.min);
-
-        // std::cout << "center = " << center << '\n';
-        // std::cout << "radius = " << radius << '\n';
+        double radius = 200.0;
 
         auto paged_lod = vsg::PagedLOD::create();
         paged_lod->options = options;
@@ -334,7 +250,7 @@ void Application::initialize_viewer()
         scene_graph->addChild(matrix_transform);
     }
 
-
+    DMD_Reader::models_loaded = true;
 
     viewer = vsg::Viewer::create();
     viewer->addWindow(window);
@@ -346,26 +262,4 @@ void Application::initialize_viewer()
     resource_hints->numDescriptorSets = 2;
 
     viewer->compile(resource_hints);
-    // load_threads = vsg::OperationThreads::create(16, viewer->status);
-    // vsg::observer_ptr<vsg::Viewer> observer_viewer(viewer);
-
-    // for (const ObjectTransformation& transformation : object_transformations)
-    // {
-    //     const std::string paths = transformation.reference->model_path + transformation.reference->texture_path;
-
-    //     const vsg::dvec3& translation = transformation.translation;
-    //     const vsg::dvec3& rotation = transformation.rotation;
-
-    //     vsg::dmat4 m1 = vsg::translate(translation);
-    //     vsg::dmat4 m2 = vsg::rotate(-rotation.z, vsg::dvec3(0.0f, 0.0f, 1.0f));
-    //     vsg::dmat4 m3 = vsg::rotate(-rotation.x, vsg::dvec3(1.0f, 0.0f, 0.0f));
-    //     vsg::dmat4 m4 = vsg::rotate(-rotation.y, vsg::dvec3(0.0f, 1.0f, 0.0f));
-
-    //     auto matrix_transform = vsg::MatrixTransform::create();
-    //     matrix_transform->matrix = m1 * m2 * m3 * m4;
-
-    //     scene_graph->addChild(matrix_transform);
-
-    //     load_threads->add(LoadOperation::create(observer_viewer, matrix_transform, paths, options));
-    // }
 }

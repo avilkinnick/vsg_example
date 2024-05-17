@@ -49,15 +49,12 @@ private:
     vsg::ref_ptr<vsg::Options> options;
 
     vsg::ref_ptr<vsg::Group> scene_graph;
-    // vsg::ComputeBounds compute_bounds;
     vsg::ref_ptr<vsg::Window> window;
     vsg::ref_ptr<vsg::Camera> camera;
     vsg::ref_ptr<vsg::CommandGraph> command_graph;
     vsg::ref_ptr<vsg::Viewer> viewer;
-    // vsg::ref_ptr<vsg::OperationThreads> load_threads;
 
     std::vector<ObjectRef> objects_ref;
-
     std::vector<ObjectTransformation> object_transformations;
 };
 

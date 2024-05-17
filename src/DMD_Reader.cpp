@@ -2,28 +2,23 @@
 
 #include "Mesh.h"
 
+#include <fstream>
 #include <iostream>
 #include <set>
 
 std::map<vsg::Path, vsg::ref_ptr<ModelData>> DMD_Reader::models;
 std::map<vsg::Path, vsg::ref_ptr<vsg::Data>> DMD_Reader::textures;
-// std::map<vsg::Path, vsg::ref_ptr<vsg::GraphicsPipelineConfigurator>> DMD_Reader::pipelines;
-// std::map<vsg::Path, vsg::ref_ptr<vsg::Command>> DMD_Reader::commands;
+std::map<vsg::Path, vsg::ref_ptr<vsg::StateGroup>> DMD_Reader::state_groups;
+
+bool DMD_Reader::models_loaded = false;
 
 vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_ptr<const vsg::Options> options) const
 {
-    std::cout << filename << '\n';
-    // vsg::ref_ptr<vsg::GraphicsPipelineConfigurator> pipeline;
-    // if (pipelines.find(filename) != pipelines.end())
-    // {
-    //     pipeline = pipelines[filename];
+    if (models_loaded || (state_groups.find(filename) != state_groups.end())) {
+        return state_groups[filename];
+    }
 
-    //     auto state_group = vsg::StateGroup::create();
-    //     pipeline->copyTo(state_group);
-    //     state_group->addChild(commands[filename]);
-
-    //     return state_group;
-    // }
+    state_groups.insert({filename, {}});
 
     const size_t dot_dmd_pos = filename.find(".dmd");
     if (dot_dmd_pos == filename.npos)
@@ -38,22 +33,27 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     if (models.find(model_path) != models.end())
     {
         model_data = models[model_path];
+        if (!model_data)
+        {
+            return {};
+        }
     }
     else
     {
         const vsg::Path model_file = vsg::findFile(model_path, options);
         if (!model_file || (vsg::fileExtension(model_file) != ".dmd"))
         {
+            models.insert({model_path, {}});
             return {};
         }
 
         model_data = load_model(model_file);
+        models.insert({model_path, model_data});
+
         if (!model_data)
         {
             return {};
         }
-
-        models.insert({model_path, model_data});
     }
 
     vsg::ref_ptr<vsg::Data> texture_data;
@@ -64,14 +64,14 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     else
     {
         const vsg::Path texture_file = vsg::findFile(texture_path, options);
-        const auto texture_data = vsg::read_cast<vsg::Data>(texture_file, options);
+        texture_data = vsg::read_cast<vsg::Data>(texture_file, options);
         textures.insert({texture_path, texture_data});
     }
 
-    auto shader_set = vsg::createFlatShadedShaderSet(options);
+    static auto shader_set = vsg::createFlatShadedShaderSet(options);
+
     if (!shader_set)
     {
-        std::cerr << "Failed to create flat shader set!\n";
         return {};
     }
 
@@ -96,12 +96,10 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
 
     pipeline->init();
 
-    // pipelines.insert({filename, pipeline});
-    // commands.insert({filename, draw_commands});
-
     auto state_group = vsg::StateGroup::create();
     pipeline->copyTo(state_group);
     state_group->addChild(draw_commands);
+    state_groups[filename] = state_group;
 
     return state_group;
 }
