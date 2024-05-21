@@ -78,7 +78,7 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
         textures.insert({texture_path, texture_data});
     }
 
-    static auto shader_set = vsg::createFlatShadedShaderSet(options);
+    static auto shader_set = vsg::createPhongShaderSet(options);
 
     if (!shader_set)
     {

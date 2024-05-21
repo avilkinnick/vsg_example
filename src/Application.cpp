@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include <stdexcept>
+#include <chrono>
 
 Application::Application(int* argc, char** argv)
     : arguments(argc, argv)
@@ -39,10 +40,19 @@ void Application::initialize()
 
 void Application::main_loop()
 {
+    auto v1 = std::chrono::steady_clock::now();
+
     while (viewer->advanceToNextFrame())
     {
         viewer->handleEvents();
         viewer->update();
+
+        auto v2 = std::chrono::steady_clock::now();
+        auto v3 = std::chrono::duration<double>(v2 - v1).count();
+        v3 /= 3;
+
+        sunLight->direction.set(cos(v3), 0.0, sin(v3));
+
         viewer->recordAndSubmit();
         viewer->present();
     }
@@ -52,6 +62,7 @@ void Application::initialize_options()
 {
     options = vsg::Options::create();
     options->add(DMD_Reader::create());
+    options->sharedObjects = vsg::SharedObjects::create();
 }
 
 void Application::initialize_scene_graph()
@@ -200,9 +211,9 @@ void Application::initialize_camera()
 
     auto viewport = vsg::ViewportState::create(0, 0, extent.width, extent.height);
     auto perspective = vsg::Perspective::create(60.0, aspect_ratio, near_far_ratio * radius, radius * 10.0);
-    auto look_at = vsg::LookAt::create(eye, center, up);
+    lookAt = vsg::LookAt::create(eye, center, up);
 
-    camera = vsg::Camera::create(perspective, look_at, viewport);
+    camera = vsg::Camera::create(perspective, lookAt, viewport);
 }
 
 void Application::initialize_command_graph()
@@ -212,6 +223,27 @@ void Application::initialize_command_graph()
 
 void Application::initialize_viewer()
 {
+    sunLight = vsg::DirectionalLight::create();
+    sunLight->name = "sun";
+    sunLight->color.set(1.0 / 253.0, 1.0 / 251.0, 1.0 / 211.0);
+    sunLight->intensity = 2.0e3f;
+    sunLight->direction.set(1.0, 1.0, 1.0);
+    sunLight->shadowMaps = 1;
+    scene_graph->addChild(sunLight);
+
+    // spotLight = vsg::SpotLight::create();
+    // spotLight->name = "Train";
+    // spotLight->color.set(1.0f, 0.0f, 0.0f);
+    // spotLight->intensity = 5.0e3f;
+    // spotLight->innerAngle = vsg::radians(5.0);
+    // spotLight->outerAngle = vsg::radians(60.0);
+
+    // cullGroup = vsg::CullGroup::create();
+    // cullGroup->bound.radius = 0.0001f;
+    // cullGroup->addChild(spotLight);
+
+    // scene_graph->addChild(spotLight);
+
     for (const ObjectTransformation& transformation : object_transformations)
     {
         const std::string paths = transformation.reference->model_path + transformation.reference->texture_path;

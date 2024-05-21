@@ -54,6 +54,11 @@ private:
     vsg::ref_ptr<vsg::CommandGraph> command_graph;
     vsg::ref_ptr<vsg::Viewer> viewer;
 
+    vsg::ref_ptr<vsg::LookAt> lookAt;
+    vsg::ref_ptr<vsg::SpotLight> spotLight;
+    vsg::ref_ptr<vsg::CullGroup> cullGroup;
+    vsg::ref_ptr<vsg::DirectionalLight> sunLight;
+
     std::vector<ObjectRef> objects_ref;
     std::vector<ObjectTransformation> object_transformations;
 };
