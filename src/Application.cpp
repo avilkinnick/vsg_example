@@ -51,7 +51,6 @@ void Application::main_loop()
 void Application::initialize_options()
 {
     options = vsg::Options::create();
-    options->add(vsgXchange::all::create());
     options->add(DMD_Reader::create());
 }
 

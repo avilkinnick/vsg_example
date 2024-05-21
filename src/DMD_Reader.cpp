@@ -6,6 +6,8 @@
 #include <iostream>
 #include <set>
 
+#include <stb_image.h>
+
 std::map<vsg::Path, vsg::ref_ptr<ModelData>> DMD_Reader::models;
 std::map<vsg::Path, vsg::ref_ptr<vsg::Data>> DMD_Reader::textures;
 std::map<vsg::Path, vsg::ref_ptr<vsg::StateGroup>> DMD_Reader::state_groups;
@@ -64,7 +66,15 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     else
     {
         const vsg::Path texture_file = vsg::findFile(texture_path, options);
-        texture_data = vsg::read_cast<vsg::Data>(texture_file, options);
+        if (vsg::fileExtension(texture_file) == ".bmp") {
+            stbi_set_flip_vertically_on_load(1);
+        } else {
+            stbi_set_flip_vertically_on_load(0);
+        }
+
+        int width, height, channels;
+        stbi_uc* pixels = stbi_load(texture_file.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+        texture_data = vsg::ubvec4Array2D::create(width, height, reinterpret_cast<vsg::ubvec4*>(pixels), vsg::Data::Properties{VK_FORMAT_R8G8B8A8_UNORM});
         textures.insert({texture_path, texture_data});
     }
 
