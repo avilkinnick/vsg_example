@@ -7,8 +7,8 @@
 struct ObjectRef
 {
     std::string label;
-    std::string model_path;
-    std::string texture_path;
+    std::string modelPath;
+    std::string texturePath;
     bool mipmap;
     bool smooth;
 };
@@ -24,34 +24,37 @@ class Application
 {
 public:
     Application(int* argc, char** argv);
-    ~Application();
 
     void run();
 
 private:
     void initialize();
-    void main_loop();
+    void update();
 
-    void initialize_options();
+    void initializeOptions();
 
-    void initialize_scene_graph();
+    void loadShaders();
 
-    void load_objects_ref(const std::string& route_path);
-    void load_route_map(const std::string& route_path);
+    void initializeSceneGraph();
 
-    void initialize_window();
-    void initialize_camera();
-    void initialize_command_graph();
-    void initialize_viewer();
+    void createLights();
+
+    void loadObjectsRef(const std::string& routePath);
+    void loadRouteMap(const std::string& routePath);
+
+    void initializeWindow();
+    void initializeCamera();
+    void initializeCommandGraph();
+    void initializeViewer();
 
 private:
     vsg::CommandLine arguments;
     vsg::ref_ptr<vsg::Options> options;
 
-    vsg::ref_ptr<vsg::Group> scene_graph;
+    vsg::ref_ptr<vsg::Group> sceneGraph;
     vsg::ref_ptr<vsg::Window> window;
     vsg::ref_ptr<vsg::Camera> camera;
-    vsg::ref_ptr<vsg::CommandGraph> command_graph;
+    vsg::ref_ptr<vsg::CommandGraph> commandGraph;
     vsg::ref_ptr<vsg::Viewer> viewer;
 
     vsg::ref_ptr<vsg::LookAt> lookAt;
@@ -59,8 +62,8 @@ private:
     vsg::ref_ptr<vsg::CullGroup> cullGroup;
     vsg::ref_ptr<vsg::DirectionalLight> sunLight;
 
-    std::vector<ObjectRef> objects_ref;
-    std::vector<ObjectTransformation> object_transformations;
+    std::vector<ObjectRef> objectsRef;
+    std::vector<ObjectTransformation> objectTransformations;
 };
 
 #endif // APPLICATION_H

@@ -66,9 +66,12 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     else
     {
         const vsg::Path texture_file = vsg::findFile(texture_path, options);
-        if (vsg::fileExtension(texture_file) == ".bmp") {
+        if (vsg::fileExtension(texture_file) == ".bmp")
+        {
             stbi_set_flip_vertically_on_load(1);
-        } else {
+        }
+        else
+        {
             stbi_set_flip_vertically_on_load(0);
         }
 
@@ -78,14 +81,7 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
         textures.insert({texture_path, texture_data});
     }
 
-    static auto shader_set = vsg::createPhongShaderSet(options);
-
-    if (!shader_set)
-    {
-        return {};
-    }
-
-    auto pipeline = vsg::GraphicsPipelineConfigurator::create(shader_set);
+    auto pipeline = vsg::GraphicsPipelineConfigurator::create(options->shaderSets.at("phong"));
 
     vsg::DataList vertex_arrays;
     pipeline->assignArray(vertex_arrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, model_data->vertices);
