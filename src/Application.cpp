@@ -92,7 +92,7 @@ void Application::createShaderSet()
 
 void Application::initializeSceneGraph()
 {
-    const std::string route_path = "../routes/agryz-krugloe_pole";
+    const std::string route_path = "../routes/rostov-kavkazskaya";
 
     sceneGraph = vsg::Group::create();
 

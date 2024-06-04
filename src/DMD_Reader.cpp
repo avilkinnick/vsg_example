@@ -76,7 +76,7 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
         }
 
         int width, height, channels;
-        stbi_uc* pixels = stbi_load(texture_file.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+        stbi_uc* pixels = stbi_load(texture_file.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
         texture_data = vsg::ubvec4Array2D::create(width, height, reinterpret_cast<vsg::ubvec4*>(pixels), vsg::Data::Properties{VK_FORMAT_R8G8B8A8_UNORM});
         textures.insert({texture_path, texture_data});
     }
@@ -180,7 +180,7 @@ vsg::ref_ptr<ModelData> DMD_Reader::load_model(const vsg::Path& model_file) cons
 
             faces_readed = true;
         }
-        else if (line == "numtverts numtvfaces" && !numtverts_readed)
+        else if ((line == "numtverts numtvfaces" || line == "numtverts numtfaces") && !numtverts_readed)
         {
             file >> vertices_count >> faces_count;
 
