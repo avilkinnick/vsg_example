@@ -25,11 +25,12 @@ void Application::run()
 void Application::initialize()
 {
     initializeOptions();
-    loadShaders();
+    createShaderSet();
     initializeWindow();
     initializeCamera();
     initializeSceneGraph();
     createLights();
+    createView();
     initializeCommandGraph();
     initializeViewer();
 }
@@ -41,20 +42,15 @@ void Application::update()
     auto startTime = vsg::clock::now();
     double numFramesCompleted = 0.0;
 
-    // rendering main loop
     while (viewer->advanceToNextFrame() && (numFrames < 0 || (numFrames--) > 0))
     {
-        // pass any events into EventHandlers assigned to the Viewer
         viewer->handleEvents();
         viewer->update();
 
         auto duration = std::chrono::duration<double, std::chrono::seconds::period>(vsg::clock::now() - startTime).count();
-        duration /= 3;
         sunLight->direction.set(cos(duration), -1.0, sin(duration));
-        sunLight->direction = vsg::normalize(sunLight->direction);
 
         viewer->recordAndSubmit();
-
         viewer->present();
 
         numFramesCompleted += 1.0;
@@ -70,27 +66,25 @@ void Application::update()
 void Application::initializeOptions()
 {
     options = vsg::Options::create();
-    options->paths = vsg::getEnvPaths("VSG_FILE_PATH");
     options->add(DMD_Reader::create());
     options->sharedObjects = vsg::SharedObjects::create();
-    for (auto& path : options->paths)
-    {
-        std::cout << path << "\n";
-    }
 }
 
-void Application::loadShaders()
+void Application::createShaderSet()
 {
-    vsg::Paths searchPaths = {"../"};
+    auto shaderHints = vsg::ShaderCompileSettings::create();
+    shaderHints->defines.insert("VSG_SHADOWS_PCSS");
 
     auto phong = vsg::createPhongShaderSet(options);
     if (!phong)
     {
         return;
     }
+
     // phong->optionalDefines.insert("SHADOWMAP_DEBUG");
     // phong->defaultShaderHints = vsg::ShaderCompileSettings::create();
     // phong->defaultShaderHints->defines.insert("SHADOWMAP_DEBUG");
+    phong->defaultShaderHints = shaderHints;
     phong->variants.clear();
 
     options->shaderSets["phong"] = phong;
@@ -108,6 +102,8 @@ void Application::initializeSceneGraph()
 
 void Application::createLights()
 {
+    auto shadowSettings = vsg::PercentageCloserSoftShadows::create(1);
+
     auto ambientLight = vsg::AmbientLight::create();
     ambientLight->name = "ambient";
     ambientLight->color.set(1.0, 1.0, 1.0);
@@ -120,13 +116,27 @@ void Application::createLights()
     sunLight->intensity = 1.0;
     sunLight->direction.set(1.0, 1.0, 1.0);
     sunLight->direction = vsg::normalize(sunLight->direction);
-    sunLight->shadowMaps = 1;
+    sunLight->shadowSettings = shadowSettings;
     sceneGraph->addChild(sunLight);
+}
+
+void Application::createView()
+{
+    double maxShadowDistance = arguments.value<double>(200.0, "--sd");
+    double shadowMapBias = arguments.value<double>(0.005, "--sb");
+    double lambda = arguments.value<double>(0.05, "--lambda");
+
+    view = vsg::View::create();
+    view->camera = camera;
+    view->viewDependentState->maxShadowDistance = maxShadowDistance;
+    view->viewDependentState->shadowMapBias = shadowMapBias;
+    view->viewDependentState->lambda = lambda;
+    view->addChild(sceneGraph);
 }
 
 void Application::loadObjectsRef(const std::string& routePath)
 {
-    std::set<std::string> invalid_textures;
+    std::set<std::string> invalidTextures;
     bool mipmap = false;
     bool smooth = false;
 
@@ -158,19 +168,19 @@ void Application::loadObjectsRef(const std::string& routePath)
         else
         {
             std::istringstream stream(line);
-            std::string label, model_path, texture_path;
-            stream >> label >> model_path >> texture_path;
+            std::string label, modelPath, texturePath;
+            stream >> label >> modelPath >> texturePath;
 
-            model_path = routePath + model_path;
-            texture_path = routePath + texture_path;
+            modelPath = routePath + modelPath;
+            texturePath = routePath + texturePath;
 
-            ObjectRef object_ref;
-            object_ref.label = label;
-            object_ref.modelPath = model_path;
-            object_ref.texturePath = texture_path;
-            object_ref.mipmap = mipmap;
-            object_ref.smooth = smooth;
-            objectsRef.push_back(object_ref);
+            ObjectRef objectRef;
+            objectRef.label = label;
+            objectRef.modelPath = modelPath;
+            objectRef.texturePath = texturePath;
+            objectRef.mipmap = mipmap;
+            objectRef.smooth = smooth;
+            objectsRef.push_back(objectRef);
         }
     }
 }
@@ -210,23 +220,23 @@ void Application::loadRouteMap(const std::string& routePath)
             rotation.y = vsg::radians(rotation.y);
             rotation.z = vsg::radians(rotation.z);
 
-            ObjectTransformation object_transformation;
-            object_transformation.reference = nullptr;
-            object_transformation.translation = translation;
-            object_transformation.rotation = rotation;
+            ObjectTransformation objectTransformation;
+            objectTransformation.reference = nullptr;
+            objectTransformation.translation = translation;
+            objectTransformation.rotation = rotation;
 
             for (ObjectRef& ref : objectsRef)
             {
                 if (ref.label == label)
                 {
-                    object_transformation.reference = &ref;
+                    objectTransformation.reference = &ref;
                     break;
                 }
             }
 
-            if (object_transformation.reference != nullptr)
+            if (objectTransformation.reference != nullptr)
             {
-                objectTransformations.push_back(object_transformation);
+                objectTransformations.push_back(objectTransformation);
             }
         }
     }
@@ -239,6 +249,7 @@ void Application::initializeWindow()
     windowTraits->debugUtils = true;
     windowTraits->queueFlags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
     windowTraits->vulkanVersion = VK_API_VERSION_1_3;
+
     auto deviceFeatures = windowTraits->deviceFeatures = vsg::DeviceFeatures::create();
     deviceFeatures->get().samplerAnisotropy = VK_TRUE;
 
@@ -272,18 +283,6 @@ void Application::initializeCamera()
 
 void Application::initializeCommandGraph()
 {
-    double maxShadowDistance = arguments.value<double>(100.0, "--sd");
-    // double shadowMapBias = arguments.value<double>(0.005, "--sb");
-    double shadowMapBias = arguments.value<double>(0.005, "--sb");
-    double lambda = arguments.value<double>(0.05, "--lambda");
-
-    auto view = vsg::View::create();
-    view->camera = camera;
-    view->viewDependentState->maxShadowDistance = maxShadowDistance;
-    view->viewDependentState->shadowMapBias = shadowMapBias;
-    view->viewDependentState->lambda = lambda;
-    view->addChild(sceneGraph);
-
     auto renderGraph = vsg::RenderGraph::create(window, view);
     commandGraph = vsg::CommandGraph::create(window, renderGraph);
 }

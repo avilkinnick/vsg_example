@@ -33,11 +33,12 @@ private:
 
     void initializeOptions();
 
-    void loadShaders();
+    void createShaderSet();
 
     void initializeSceneGraph();
 
     void createLights();
+    void createView();
 
     void loadObjectsRef(const std::string& routePath);
     void loadRouteMap(const std::string& routePath);
@@ -54,6 +55,7 @@ private:
     vsg::ref_ptr<vsg::Group> sceneGraph;
     vsg::ref_ptr<vsg::Window> window;
     vsg::ref_ptr<vsg::Camera> camera;
+    vsg::ref_ptr<vsg::View> view;
     vsg::ref_ptr<vsg::CommandGraph> commandGraph;
     vsg::ref_ptr<vsg::Viewer> viewer;
 
