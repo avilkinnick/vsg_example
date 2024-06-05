@@ -74,6 +74,7 @@ void Application::createShaderSet()
 {
     auto shaderHints = vsg::ShaderCompileSettings::create();
     shaderHints->defines.insert("VSG_SHADOWS_PCSS");
+    shaderHints->defines.insert("VSG_ALPHA_TEST");
 
     auto phong = vsg::createPhongShaderSet(options);
     if (!phong)
