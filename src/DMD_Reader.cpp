@@ -8,8 +8,6 @@
 
 #include <stb_image.h>
 
-std::map<vsg::Path, vsg::ref_ptr<ModelData>> DMD_Reader::models;
-std::map<vsg::Path, vsg::ref_ptr<vsg::Data>> DMD_Reader::textures;
 std::map<vsg::Path, vsg::ref_ptr<vsg::StateGroup>> DMD_Reader::state_groups;
 
 vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_ptr<const vsg::Options> options) const
@@ -19,12 +17,11 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
         return state_groups[filename];
     }
 
-    state_groups.insert({filename, vsg::StateGroup::create()});
-
     const size_t dot_dmd_pos = filename.find(".dmd");
     if (dot_dmd_pos == filename.npos)
     {
-        return {};
+        state_groups.insert({filename, vsg::StateGroup::create()});
+        return state_groups[filename];
     }
 
     vsg::Path model_path;
@@ -35,55 +32,36 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     stream >> texture_path;
 
     vsg::ref_ptr<ModelData> model_data;
-    if (models.find(model_path) != models.end())
+    const vsg::Path model_file = vsg::findFile(model_path, options);
+    if (!model_file || (vsg::fileExtension(model_file) != ".dmd"))
     {
-        model_data = models[model_path];
-        if (!model_data)
-        {
-            return {};
-        }
+        state_groups.insert({filename, vsg::StateGroup::create()});
+        return state_groups[filename];
     }
-    else
+
+    model_data = load_model(model_file);
+
+    if (!model_data)
     {
-        const vsg::Path model_file = vsg::findFile(model_path, options);
-        if (!model_file || (vsg::fileExtension(model_file) != ".dmd"))
-        {
-            models.insert({model_path, {}});
-            return {};
-        }
-
-        model_data = load_model(model_file);
-        models.insert({model_path, model_data});
-
-        if (!model_data)
-        {
-            return {};
-        }
+        state_groups.insert({filename, vsg::StateGroup::create()});
+        return state_groups[filename];
     }
 
     vsg::ref_ptr<vsg::Data> texture_data;
     stbi_uc* pixels = NULL;
-    if (textures.find(texture_path) != textures.end())
+    const vsg::Path textureFile = vsg::findFile(texture_path, options);
+    if (vsg::fileExtension(textureFile) == ".bmp")
     {
-        texture_data = textures[texture_path];
+        stbi_set_flip_vertically_on_load(1);
     }
     else
     {
-        const vsg::Path textureFile = vsg::findFile(texture_path, options);
-        if (vsg::fileExtension(textureFile) == ".bmp")
-        {
-            stbi_set_flip_vertically_on_load(1);
-        }
-        else
-        {
-            stbi_set_flip_vertically_on_load(0);
-        }
-
-        int width, height, channels;
-        pixels = stbi_load(textureFile.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
-        texture_data = vsg::ubvec4Array2D::create(width, height, reinterpret_cast<vsg::ubvec4*>(pixels), vsg::Data::Properties{VK_FORMAT_R8G8B8A8_UNORM});
-        textures.insert({texture_path, texture_data});
+        stbi_set_flip_vertically_on_load(0);
     }
+
+    int width, height, channels;
+    pixels = stbi_load(textureFile.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
+    texture_data = vsg::ubvec4Array2D::create(width, height, reinterpret_cast<vsg::ubvec4*>(pixels), vsg::Data::Properties{VK_FORMAT_R8G8B8A8_UNORM});
 
     auto pipeline = vsg::GraphicsPipelineConfigurator::create(options->shaderSets.at("phong"));
 
@@ -109,7 +87,7 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     auto state_group = vsg::StateGroup::create();
     pipeline->copyTo(state_group);
     state_group->addChild(drawCommands);
-    state_groups[filename] = state_group;
+    state_groups.insert({filename, state_group});
 
     return state_group;
 }

@@ -66,6 +66,7 @@ void Application::update()
 void Application::initializeOptions()
 {
     options = vsg::Options::create();
+    options->add(vsgXchange::all::create());
     options->add(DMD_Reader::create());
     options->sharedObjects = vsg::SharedObjects::create();
 }

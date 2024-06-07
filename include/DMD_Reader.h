@@ -23,8 +23,6 @@ private:
     vsg::ref_ptr<ModelData> load_model(const vsg::Path& model_file) const;
     void remove_carriage_return_symbols(std::string& str) const;
 
-    static std::map<vsg::Path, vsg::ref_ptr<ModelData>> models;
-    static std::map<vsg::Path, vsg::ref_ptr<vsg::Data>> textures;
     static std::map<vsg::Path, vsg::ref_ptr<vsg::StateGroup>> state_groups;
 };
 
