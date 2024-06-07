@@ -68,6 +68,7 @@ void Application::initializeOptions()
     options = vsg::Options::create();
     options->add(vsgXchange::all::create());
     options->add(DMD_Reader::create());
+    DMD_Reader::init();
     options->sharedObjects = vsg::SharedObjects::create();
 }
 
@@ -94,7 +95,7 @@ void Application::createShaderSet()
 
 void Application::initializeSceneGraph()
 {
-    const std::string route_path = "../routes/rostov-kavkazskaya";
+    const std::string route_path = "../routes/agryz-krugloe_pole";
 
     sceneGraph = vsg::Group::create();
 
@@ -311,7 +312,6 @@ void Application::initializeViewer()
 
         auto matrixTransform = vsg::MatrixTransform::create();
         matrixTransform->matrix = m1 * m2 * m3 * m4;
-        // matrixTransform->transform(m1 * m2 * m3 * m4);
         matrixTransform->addChild(pagedLod);
 
         sceneGraph->addChild(matrixTransform);

@@ -8,6 +8,10 @@
 
 #include <stb_image.h>
 
+vsg::ref_ptr<vsg::DescriptorSetLayout>  DMD_Reader::descriptorSetLayout;
+vsg::ref_ptr<vsg::PipelineLayout>       DMD_Reader::pipelineLayout;
+vsg::ref_ptr<vsg::BindGraphicsPipeline> DMD_Reader::bindGraphicsPipeline;
+
 std::map<vsg::Path, vsg::ref_ptr<vsg::StateGroup>> DMD_Reader::state_groups;
 
 vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_ptr<const vsg::Options> options) const
@@ -63,6 +67,24 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     pixels = stbi_load(textureFile.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
     texture_data = vsg::ubvec4Array2D::create(width, height, reinterpret_cast<vsg::ubvec4*>(pixels), vsg::Data::Properties{VK_FORMAT_R8G8B8A8_UNORM});
 
+    //--------------------------------------------------------------------------
+    // auto texture = vsg::DescriptorImage::create(vsg::Sampler::create(), texture_data, 0, 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+
+    // auto descriptorSet = vsg::DescriptorSet::create(descriptorSetLayout, vsg::Descriptors{texture});
+    // auto bindDescriptorSet = vsg::BindDescriptorSet::create(VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, descriptorSet);
+
+    // auto scenegraph = vsg::StateGroup::create();
+    // scenegraph->add(bindGraphicsPipeline);
+    // scenegraph->add(bindDescriptorSet);
+
+    // auto drawCommands2 = vsg::Commands::create();
+    // drawCommands2->addChild(vsg::BindVertexBuffers::create(0, vsg::DataList{model_data->vertices, model_data->normals, model_data->tex_coords, model_data->colors}));
+    // drawCommands2->addChild(vsg::BindIndexBuffer::create(model_data->indices));
+    // drawCommands2->addChild(vsg::DrawIndexed::create(model_data->indices->size(), 1, 0, 0, 0));
+
+    // scenegraph->addChild(drawCommands2);
+    //--------------------------------------------------------------------------
+
     auto pipeline = vsg::GraphicsPipelineConfigurator::create(options->shaderSets.at("phong"));
 
     vsg::DataList vertexArrays;
@@ -90,6 +112,9 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     state_groups.insert({filename, state_group});
 
     return state_group;
+
+    // state_groups.insert({filename, scenegraph});
+    // return scenegraph;
 }
 
 vsg::ref_ptr<ModelData> DMD_Reader::load_model(const vsg::Path& model_file) const
@@ -303,4 +328,75 @@ void DMD_Reader::remove_carriage_return_symbols(std::string& str) const
         }
         str.erase(CR_pos);
     }
+}
+
+//------------------------------------------------------------------------------
+// layout(location = 0) in vec3 vsg_Vertex;
+// layout(location = 1) in vec3 vsg_Normal;
+// layout(location = 2) in vec2 vsg_TexCoord0;
+// layout(location = 3) in vec4 vsg_Color;
+//------------------------------------------------------------------------------
+// layout(set = MATERIAL_DESCRIPTOR_SET, binding = 10) uniform MaterialData
+// {
+// vec4 ambientColor;
+// vec4 diffuseColor;
+// vec4 specularColor;
+// vec4 emissiveColor;
+// float shininess;
+// float alphaMask;
+// float alphaMaskCutoff;
+// } material;
+//------------------------------------------------------------------------------
+// layout(set = VIEW_DESCRIPTOR_SET, binding = 0) uniform LightData
+// {
+// vec4 values[2048];
+// } lightData;
+//------------------------------------------------------------------------------
+// layout(set = VIEW_DESCRIPTOR_SET, binding = 2) uniform sampler2DArrayShadow shadowMaps;
+//------------------------------------------------------------------------------
+
+void DMD_Reader::init()
+{
+    vsg::Paths searchPaths({"../"});
+    vsg::ref_ptr<vsg::ShaderStage> vertexShader = vsg::ShaderStage::read(VK_SHADER_STAGE_VERTEX_BIT, "main", vsg::findFile("shaders/vert_PushConstants.spv", searchPaths));
+    vsg::ref_ptr<vsg::ShaderStage> fragmentShader = vsg::ShaderStage::read(VK_SHADER_STAGE_FRAGMENT_BIT, "main", vsg::findFile("shaders/frag_PushConstants.spv", searchPaths));
+
+    //!!!
+    vsg::DescriptorSetLayoutBindings descriptorBindings{
+        {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr} // { binding, descriptorType, descriptorCount, stageFlags, pImmutableSamplers}
+    };
+    //!!!
+
+    descriptorSetLayout = vsg::DescriptorSetLayout::create(descriptorBindings);
+
+    vsg::PushConstantRanges pushConstantRanges{
+        {VK_SHADER_STAGE_VERTEX_BIT, 0, 128} // projection, view, and model matrices, actual push constant calls automatically provided by the VSG's RecordTraversal
+    };
+
+    vsg::VertexInputState::Bindings vertexBindingsDescriptions{
+        VkVertexInputBindingDescription{0, sizeof(vsg::vec3), VK_VERTEX_INPUT_RATE_VERTEX}, // vertex data
+        VkVertexInputBindingDescription{1, sizeof(vsg::vec3), VK_VERTEX_INPUT_RATE_VERTEX}, // normal data
+        VkVertexInputBindingDescription{2, sizeof(vsg::vec2), VK_VERTEX_INPUT_RATE_VERTEX}, // tex coord data
+        VkVertexInputBindingDescription{3, sizeof(vsg::vec4), VK_VERTEX_INPUT_RATE_VERTEX}  // color data
+    };
+
+    vsg::VertexInputState::Attributes vertexAttributeDescriptions{
+        VkVertexInputAttributeDescription{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0},   // vertex data
+        VkVertexInputAttributeDescription{1, 1, VK_FORMAT_R32G32B32_SFLOAT, 0},   // normal data
+        VkVertexInputAttributeDescription{2, 2, VK_FORMAT_R32G32_SFLOAT, 0},      // tex coord data
+        VkVertexInputAttributeDescription{3, 3, VK_FORMAT_R32G32B32A32_SFLOAT, 0} // color data
+    };
+
+    vsg::GraphicsPipelineStates pipelineStates{
+       vsg::VertexInputState::create(vertexBindingsDescriptions, vertexAttributeDescriptions),
+       vsg::InputAssemblyState::create(),
+       vsg::RasterizationState::create(),
+       vsg::MultisampleState::create(),
+       vsg::ColorBlendState::create(),
+       vsg::DepthStencilState::create()
+    };
+
+    pipelineLayout = vsg::PipelineLayout::create(vsg::DescriptorSetLayouts{descriptorSetLayout}, pushConstantRanges);
+    auto graphicsPipeline = vsg::GraphicsPipeline::create(pipelineLayout, vsg::ShaderStages{vertexShader, fragmentShader}, pipelineStates);
+    bindGraphicsPipeline = vsg::BindGraphicsPipeline::create(graphicsPipeline);
 }
