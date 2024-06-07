@@ -168,7 +168,7 @@ vsg::ref_ptr<ModelData> DMD_Reader::load_model(const vsg::Path& model_file) cons
 
             current_mesh->vertices = vsg::vec3Array::create(vertices_count);
             current_mesh->normals = vsg::vec3Array::create(vertices_count);
-            current_mesh->tex_coords = vsg::vec3Array::create(vertices_count);
+            current_mesh->tex_coords = vsg::vec2Array::create(vertices_count);
             current_mesh->colors = vsg::vec4Array::create(vertices_count);
             current_mesh->indices = vsg::ushortArray::create(indices_count);
 
@@ -184,6 +184,8 @@ vsg::ref_ptr<ModelData> DMD_Reader::load_model(const vsg::Path& model_file) cons
             for (auto& texCoord : *current_mesh->tex_coords)
             {
                 file >> texCoord;
+                float trash;
+                file >> trash;
             }
 
             tverts_readed = true;
@@ -257,7 +259,7 @@ vsg::ref_ptr<ModelData> DMD_Reader::load_model(const vsg::Path& model_file) cons
     auto model_data = ModelData::create();
     model_data->vertices = vsg::vec3Array::create(model_vertices_count);
     model_data->normals = vsg::vec3Array::create(model_vertices_count);
-    model_data->tex_coords = vsg::vec3Array::create(model_vertices_count);
+    model_data->tex_coords = vsg::vec2Array::create(model_vertices_count);
     model_data->colors = vsg::vec4Array::create(model_vertices_count);
     model_data->indices = vsg::ushortArray::create(model_indices_count);
 
