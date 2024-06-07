@@ -111,6 +111,8 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     state_group->addChild(drawCommands);
     state_groups.insert({filename, state_group});
 
+    // stbi_image_free(pixels);
+
     return state_group;
 
     // state_groups.insert({filename, scenegraph});
