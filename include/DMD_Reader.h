@@ -19,8 +19,6 @@ class DMD_Reader : public vsg::Inherit<vsg::ReaderWriter, DMD_Reader>
 public:
     vsg::ref_ptr<vsg::Object> read(const vsg::Path& filename, vsg::ref_ptr<const vsg::Options> options = {}) const override;
 
-    static bool models_loaded;
-
 private:
     vsg::ref_ptr<ModelData> load_model(const vsg::Path& model_file) const;
     void remove_carriage_return_symbols(std::string& str) const;

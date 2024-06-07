@@ -12,15 +12,14 @@ std::map<vsg::Path, vsg::ref_ptr<ModelData>> DMD_Reader::models;
 std::map<vsg::Path, vsg::ref_ptr<vsg::Data>> DMD_Reader::textures;
 std::map<vsg::Path, vsg::ref_ptr<vsg::StateGroup>> DMD_Reader::state_groups;
 
-bool DMD_Reader::models_loaded = false;
-
 vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_ptr<const vsg::Options> options) const
 {
-    if (models_loaded || (state_groups.find(filename) != state_groups.end())) {
+    if (state_groups.find(filename) != state_groups.end())
+    {
         return state_groups[filename];
     }
 
-    state_groups.insert({filename, {}});
+    state_groups.insert({filename, vsg::StateGroup::create()});
 
     const size_t dot_dmd_pos = filename.find(".dmd");
     if (dot_dmd_pos == filename.npos)
@@ -28,8 +27,12 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
         return {};
     }
 
-    const vsg::Path model_path = filename.substr(0, dot_dmd_pos + 4);
-    const vsg::Path texture_path = filename.substr(dot_dmd_pos + 4, filename.size() - model_path.size());
+    vsg::Path model_path;
+    vsg::Path texture_path;
+
+    std::stringstream stream(filename);
+    stream >> model_path;
+    stream >> texture_path;
 
     vsg::ref_ptr<ModelData> model_data;
     if (models.find(model_path) != models.end())
@@ -59,14 +62,15 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     }
 
     vsg::ref_ptr<vsg::Data> texture_data;
+    stbi_uc* pixels = NULL;
     if (textures.find(texture_path) != textures.end())
     {
         texture_data = textures[texture_path];
     }
     else
     {
-        const vsg::Path texture_file = vsg::findFile(texture_path, options);
-        if (vsg::fileExtension(texture_file) == ".bmp")
+        const vsg::Path textureFile = vsg::findFile(texture_path, options);
+        if (vsg::fileExtension(textureFile) == ".bmp")
         {
             stbi_set_flip_vertically_on_load(1);
         }
@@ -76,23 +80,23 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
         }
 
         int width, height, channels;
-        stbi_uc* pixels = stbi_load(texture_file.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
+        pixels = stbi_load(textureFile.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
         texture_data = vsg::ubvec4Array2D::create(width, height, reinterpret_cast<vsg::ubvec4*>(pixels), vsg::Data::Properties{VK_FORMAT_R8G8B8A8_UNORM});
         textures.insert({texture_path, texture_data});
     }
 
     auto pipeline = vsg::GraphicsPipelineConfigurator::create(options->shaderSets.at("phong"));
 
-    vsg::DataList vertex_arrays;
-    pipeline->assignArray(vertex_arrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, model_data->vertices);
-    pipeline->assignArray(vertex_arrays, "vsg_Normal", VK_VERTEX_INPUT_RATE_VERTEX, model_data->normals);
-    pipeline->assignArray(vertex_arrays, "vsg_TexCoord0", VK_VERTEX_INPUT_RATE_VERTEX, model_data->tex_coords);
-    pipeline->assignArray(vertex_arrays, "vsg_Color", VK_VERTEX_INPUT_RATE_VERTEX, model_data->colors);
+    vsg::DataList vertexArrays;
+    pipeline->assignArray(vertexArrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, model_data->vertices);
+    pipeline->assignArray(vertexArrays, "vsg_Normal", VK_VERTEX_INPUT_RATE_VERTEX, model_data->normals);
+    pipeline->assignArray(vertexArrays, "vsg_TexCoord0", VK_VERTEX_INPUT_RATE_VERTEX, model_data->tex_coords);
+    pipeline->assignArray(vertexArrays, "vsg_Color", VK_VERTEX_INPUT_RATE_VERTEX, model_data->colors);
 
-    auto draw_commands = vsg::Commands::create();
-    draw_commands->addChild(vsg::BindVertexBuffers::create(pipeline->baseAttributeBinding, vertex_arrays));
-    draw_commands->addChild(vsg::BindIndexBuffer::create(model_data->indices));
-    draw_commands->addChild(vsg::DrawIndexed::create(model_data->indices->size(), 1, 0, 0, 0));
+    auto drawCommands = vsg::Commands::create();
+    drawCommands->addChild(vsg::BindVertexBuffers::create(pipeline->baseAttributeBinding, vertexArrays));
+    drawCommands->addChild(vsg::BindIndexBuffer::create(model_data->indices));
+    drawCommands->addChild(vsg::DrawIndexed::create(model_data->indices->size(), 1, 0, 0, 0));
 
     if (texture_data)
     {
@@ -104,7 +108,7 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
 
     auto state_group = vsg::StateGroup::create();
     pipeline->copyTo(state_group);
-    state_group->addChild(draw_commands);
+    state_group->addChild(drawCommands);
     state_groups[filename] = state_group;
 
     return state_group;

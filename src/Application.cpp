@@ -292,7 +292,13 @@ void Application::initializeViewer()
 {
     for (const ObjectTransformation& transformation : objectTransformations)
     {
-        const std::string paths = transformation.reference->modelPath + transformation.reference->texturePath;
+        const std::string paths = transformation.reference->modelPath + " " + transformation.reference->texturePath + " qqqqqq.qqqqqq";
+
+        auto pagedLod = vsg::PagedLOD::create();
+        pagedLod->options = options;
+        pagedLod->filename = paths;
+        pagedLod->children[0].minimumScreenHeightRatio = 0.2;
+        pagedLod->bound = vsg::dsphere(vsg::dvec3(0.0, 0.0, 0.0), 200);
 
         const vsg::dvec3& translation = transformation.translation;
         const vsg::dvec3& rotation = transformation.rotation;
@@ -302,32 +308,13 @@ void Application::initializeViewer()
         vsg::dmat4 m3 = vsg::rotate(-rotation.x, vsg::dvec3(1.0f, 0.0f, 0.0f));
         vsg::dmat4 m4 = vsg::rotate(-rotation.y, vsg::dvec3(0.0f, 1.0f, 0.0f));
 
-        auto model = vsg::read_cast<vsg::StateGroup>(paths, options);
-        if (!model)
-        {
-            continue;
-        }
+        auto matrixTransform = vsg::MatrixTransform::create();
+        matrixTransform->matrix = m1 * m2 * m3 * m4;
+        // matrixTransform->transform(m1 * m2 * m3 * m4);
+        matrixTransform->addChild(pagedLod);
 
-        vsg::ComputeBounds bounds;
-        model->accept(bounds);
-
-        vsg::dvec3 center = (bounds.bounds.min + bounds.bounds.max) * 0.5;
-        double radius = 200.0;
-
-        auto paged_lod = vsg::PagedLOD::create();
-        paged_lod->options = options;
-        paged_lod->filename = paths;
-        paged_lod->children[0].minimumScreenHeightRatio = 0.2;
-        paged_lod->bound = vsg::dsphere(center, radius);
-
-        auto matrix_transform = vsg::MatrixTransform::create();
-        matrix_transform->matrix = m1 * m2 * m3 * m4;
-        matrix_transform->addChild(paged_lod);
-
-        sceneGraph->addChild(matrix_transform);
+        sceneGraph->addChild(matrixTransform);
     }
-
-    DMD_Reader::models_loaded = true;
 
     viewer = vsg::Viewer::create();
     viewer->addWindow(window);
@@ -335,8 +322,8 @@ void Application::initializeViewer()
     viewer->addEventHandler(vsg::CloseHandler::create(viewer));
     viewer->addEventHandler(vsg::Trackball::create(camera));
 
-    auto resource_hints = vsg::ResourceHints::create();
-    resource_hints->numDescriptorSets = 4;
+    auto resourceHints = vsg::ResourceHints::create();
+    resourceHints->numDescriptorSets = 4;
 
-    viewer->compile(resource_hints);
+    viewer->compile(resourceHints);
 }
