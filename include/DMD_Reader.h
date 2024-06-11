@@ -29,7 +29,7 @@ private:
     static vsg::ref_ptr<vsg::PipelineLayout>       pipelineLayout;
     static vsg::ref_ptr<vsg::BindGraphicsPipeline> bindGraphicsPipeline;
 
-    static std::map<vsg::Path, vsg::ref_ptr<vsg::StateGroup>> state_groups;
+    // static std::map<vsg::Path, vsg::ref_ptr<vsg::StateGroup>> state_groups;
 };
 
 #endif // DMD_READER_H

@@ -12,20 +12,22 @@ vsg::ref_ptr<vsg::DescriptorSetLayout>  DMD_Reader::descriptorSetLayout;
 vsg::ref_ptr<vsg::PipelineLayout>       DMD_Reader::pipelineLayout;
 vsg::ref_ptr<vsg::BindGraphicsPipeline> DMD_Reader::bindGraphicsPipeline;
 
-std::map<vsg::Path, vsg::ref_ptr<vsg::StateGroup>> DMD_Reader::state_groups;
+// std::map<vsg::Path, vsg::ref_ptr<vsg::StateGroup>> DMD_Reader::state_groups;
 
 vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_ptr<const vsg::Options> options) const
 {
-    if (state_groups.find(filename) != state_groups.end())
-    {
-        return state_groups[filename];
-    }
+    vsg::ref_ptr<vsg::SharedObjects> sharedObjects = options->sharedObjects;
+
+    // if (state_groups.find(filename) != state_groups.end())
+    // {
+    //     return state_groups[filename];
+    // }
 
     const size_t dot_dmd_pos = filename.find(".dmd");
     if (dot_dmd_pos == filename.npos)
     {
-        state_groups.insert({filename, vsg::StateGroup::create()});
-        return state_groups[filename];
+        // state_groups.insert({filename, vsg::StateGroup::create()});
+        return vsg::StateGroup::create();
     }
 
     vsg::Path model_path;
@@ -39,16 +41,16 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     const vsg::Path model_file = vsg::findFile(model_path, options);
     if (!model_file || (vsg::fileExtension(model_file) != ".dmd"))
     {
-        state_groups.insert({filename, vsg::StateGroup::create()});
-        return state_groups[filename];
+        // state_groups.insert({filename, vsg::StateGroup::create()});
+        return vsg::StateGroup::create();
     }
 
     model_data = load_model(model_file);
 
     if (!model_data)
     {
-        state_groups.insert({filename, vsg::StateGroup::create()});
-        return state_groups[filename];
+        // state_groups.insert({filename, vsg::StateGroup::create()});
+        return vsg::StateGroup::create();
     }
 
     vsg::ref_ptr<vsg::Data> texture_data;
@@ -67,25 +69,8 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     pixels = stbi_load(textureFile.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
     texture_data = vsg::ubvec4Array2D::create(width, height, reinterpret_cast<vsg::ubvec4*>(pixels), vsg::Data::Properties{VK_FORMAT_R8G8B8A8_UNORM});
 
-    //--------------------------------------------------------------------------
-    // auto texture = vsg::DescriptorImage::create(vsg::Sampler::create(), texture_data, 0, 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-
-    // auto descriptorSet = vsg::DescriptorSet::create(descriptorSetLayout, vsg::Descriptors{texture});
-    // auto bindDescriptorSet = vsg::BindDescriptorSet::create(VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, descriptorSet);
-
-    // auto scenegraph = vsg::StateGroup::create();
-    // scenegraph->add(bindGraphicsPipeline);
-    // scenegraph->add(bindDescriptorSet);
-
-    // auto drawCommands2 = vsg::Commands::create();
-    // drawCommands2->addChild(vsg::BindVertexBuffers::create(0, vsg::DataList{model_data->vertices, model_data->normals, model_data->tex_coords, model_data->colors}));
-    // drawCommands2->addChild(vsg::BindIndexBuffer::create(model_data->indices));
-    // drawCommands2->addChild(vsg::DrawIndexed::create(model_data->indices->size(), 1, 0, 0, 0));
-
-    // scenegraph->addChild(drawCommands2);
-    //--------------------------------------------------------------------------
-
     auto pipeline = vsg::GraphicsPipelineConfigurator::create(options->shaderSets.at("phong"));
+    // sharedObjects->share(pipeline);
 
     vsg::DataList vertexArrays;
     pipeline->assignArray(vertexArrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, model_data->vertices);
@@ -109,7 +94,7 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     auto state_group = vsg::StateGroup::create();
     pipeline->copyTo(state_group);
     state_group->addChild(drawCommands);
-    state_groups.insert({filename, state_group});
+    // state_groups.insert({filename, state_group});
 
     // stbi_image_free(pixels);
 

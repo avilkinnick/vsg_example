@@ -66,7 +66,7 @@ void Application::update()
 void Application::initializeOptions()
 {
     options = vsg::Options::create();
-    options->add(vsgXchange::all::create());
+    // options->add(vsgXchange::all::create());
     options->add(DMD_Reader::create());
     DMD_Reader::init();
     options->sharedObjects = vsg::SharedObjects::create();
@@ -74,9 +74,16 @@ void Application::initializeOptions()
 
 void Application::createShaderSet()
 {
+
+
+
+
+
     auto shaderHints = vsg::ShaderCompileSettings::create();
     shaderHints->defines.insert("VSG_SHADOWS_PCSS");
     shaderHints->defines.insert("VSG_ALPHA_TEST");
+
+    auto v1 = vsg::TileDatabaseSettings::create();
 
     auto phong = vsg::createPhongShaderSet(options);
     if (!phong)
