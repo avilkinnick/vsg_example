@@ -74,11 +74,6 @@ void Application::initializeOptions()
 
 void Application::createShaderSet()
 {
-
-
-
-
-
     auto shaderHints = vsg::ShaderCompileSettings::create();
     shaderHints->defines.insert("VSG_SHADOWS_PCSS");
     shaderHints->defines.insert("VSG_ALPHA_TEST");
@@ -91,9 +86,6 @@ void Application::createShaderSet()
         return;
     }
 
-    // phong->optionalDefines.insert("SHADOWMAP_DEBUG");
-    // phong->defaultShaderHints = vsg::ShaderCompileSettings::create();
-    // phong->defaultShaderHints->defines.insert("SHADOWMAP_DEBUG");
     phong->defaultShaderHints = shaderHints;
     phong->variants.clear();
 
@@ -255,10 +247,10 @@ void Application::loadRouteMap(const std::string& routePath)
 void Application::initializeWindow()
 {
     auto windowTraits = vsg::WindowTraits::create();
-    windowTraits->debugLayer = true;
-    windowTraits->debugUtils = true;
-    windowTraits->queueFlags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
-    windowTraits->vulkanVersion = VK_API_VERSION_1_3;
+    // windowTraits->debugLayer = true;
+    // windowTraits->debugUtils = true;
+    // windowTraits->queueFlags = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
+    // windowTraits->vulkanVersion = VK_API_VERSION_1_3;
 
     auto deviceFeatures = windowTraits->deviceFeatures = vsg::DeviceFeatures::create();
     deviceFeatures->get().samplerAnisotropy = VK_TRUE;
@@ -323,6 +315,9 @@ void Application::initializeViewer()
 
         sceneGraph->addChild(matrixTransform);
     }
+
+    objectTransformations.clear();
+    objectsRef.clear();
 
     viewer = vsg::Viewer::create();
     viewer->addWindow(window);

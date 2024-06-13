@@ -78,10 +78,16 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     pipeline->assignArray(vertexArrays, "vsg_TexCoord0", VK_VERTEX_INPUT_RATE_VERTEX, model_data->tex_coords);
     pipeline->assignArray(vertexArrays, "vsg_Color", VK_VERTEX_INPUT_RATE_VERTEX, model_data->colors);
 
+    sharedObjects->share(vertexArrays);
+    sharedObjects->share(model_data->indices);
+
     auto drawCommands = vsg::Commands::create();
     drawCommands->addChild(vsg::BindVertexBuffers::create(pipeline->baseAttributeBinding, vertexArrays));
     drawCommands->addChild(vsg::BindIndexBuffer::create(model_data->indices));
     drawCommands->addChild(vsg::DrawIndexed::create(model_data->indices->size(), 1, 0, 0, 0));
+
+    sharedObjects->share(drawCommands->children);
+    sharedObjects->share(drawCommands);
 
     if (texture_data)
     {
@@ -89,19 +95,14 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
         pipeline->assignTexture("diffuseMap", texture_data, sampler);
     }
 
-    pipeline->init();
+    sharedObjects->share(pipeline, [](auto gpc) { gpc->init(); });
 
-    auto state_group = vsg::StateGroup::create();
-    pipeline->copyTo(state_group);
-    state_group->addChild(drawCommands);
-    // state_groups.insert({filename, state_group});
+    auto stateGroup = vsg::StateGroup::create();
+    pipeline->copyTo(stateGroup);
+    stateGroup->addChild(drawCommands);
+    sharedObjects->share(stateGroup);
 
-    // stbi_image_free(pixels);
-
-    return state_group;
-
-    // state_groups.insert({filename, scenegraph});
-    // return scenegraph;
+    return stateGroup;
 }
 
 vsg::ref_ptr<ModelData> DMD_Reader::load_model(const vsg::Path& model_file) const
