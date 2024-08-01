@@ -293,13 +293,13 @@ void Application::initializeViewer()
 {
     for (const ObjectTransformation& transformation : objectTransformations)
     {
-        const std::string paths = transformation.reference->modelPath + " " + transformation.reference->texturePath + " qqqqqq.qqqqqq";
+        const vsg::Path paths = transformation.reference->modelPath + " " + transformation.reference->texturePath + " qqqqqq.qqqqqq";
 
         auto pagedLod = vsg::PagedLOD::create();
         pagedLod->options = options;
         pagedLod->filename = paths;
         pagedLod->children[0].minimumScreenHeightRatio = 0.2;
-        pagedLod->bound = vsg::dsphere(vsg::dvec3(0.0, 0.0, 0.0), 200);
+        pagedLod->bound = vsg::dsphere(vsg::dvec3(0.0, 0.0, 0.0), 100);
 
         const vsg::dvec3& translation = transformation.translation;
         const vsg::dvec3& rotation = transformation.rotation;
@@ -325,8 +325,5 @@ void Application::initializeViewer()
     viewer->addEventHandler(vsg::CloseHandler::create(viewer));
     viewer->addEventHandler(vsg::Trackball::create(camera));
 
-    auto resourceHints = vsg::ResourceHints::create();
-    resourceHints->numDescriptorSets = 4;
-
-    viewer->compile(resourceHints);
+    viewer->compile();
 }

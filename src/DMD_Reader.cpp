@@ -12,21 +12,13 @@ vsg::ref_ptr<vsg::DescriptorSetLayout>  DMD_Reader::descriptorSetLayout;
 vsg::ref_ptr<vsg::PipelineLayout>       DMD_Reader::pipelineLayout;
 vsg::ref_ptr<vsg::BindGraphicsPipeline> DMD_Reader::bindGraphicsPipeline;
 
-// std::map<vsg::Path, vsg::ref_ptr<vsg::StateGroup>> DMD_Reader::state_groups;
-
 vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_ptr<const vsg::Options> options) const
 {
     vsg::ref_ptr<vsg::SharedObjects> sharedObjects = options->sharedObjects;
 
-    // if (state_groups.find(filename) != state_groups.end())
-    // {
-    //     return state_groups[filename];
-    // }
-
     const size_t dot_dmd_pos = filename.find(".dmd");
     if (dot_dmd_pos == filename.npos)
     {
-        // state_groups.insert({filename, vsg::StateGroup::create()});
         return vsg::StateGroup::create();
     }
 
@@ -41,7 +33,6 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     const vsg::Path model_file = vsg::findFile(model_path, options);
     if (!model_file || (vsg::fileExtension(model_file) != ".dmd"))
     {
-        // state_groups.insert({filename, vsg::StateGroup::create()});
         return vsg::StateGroup::create();
     }
 
@@ -49,7 +40,6 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
 
     if (!model_data)
     {
-        // state_groups.insert({filename, vsg::StateGroup::create()});
         return vsg::StateGroup::create();
     }
 
@@ -70,7 +60,6 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     texture_data = vsg::ubvec4Array2D::create(width, height, reinterpret_cast<vsg::ubvec4*>(pixels), vsg::Data::Properties{VK_FORMAT_R8G8B8A8_UNORM});
 
     auto pipeline = vsg::GraphicsPipelineConfigurator::create(options->shaderSets.at("phong"));
-    // sharedObjects->share(pipeline);
 
     vsg::DataList vertexArrays;
     pipeline->assignArray(vertexArrays, "vsg_Vertex", VK_VERTEX_INPUT_RATE_VERTEX, model_data->vertices);
@@ -91,7 +80,9 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
 
     if (texture_data)
     {
-        static auto sampler = vsg::Sampler::create();
+        auto sampler = vsg::Sampler::create();
+        sampler->maxLod = 10.0f;
+        sharedObjects->share(sampler);
         pipeline->assignTexture("diffuseMap", texture_data, sampler);
     }
 
@@ -105,202 +96,230 @@ vsg::ref_ptr<vsg::Object> DMD_Reader::read(const vsg::Path& filename, vsg::ref_p
     return stateGroup;
 }
 
-vsg::ref_ptr<ModelData> DMD_Reader::load_model(const vsg::Path& model_file) const
+struct vertex_t
 {
-    bool object_added = false;
-    bool numverts_readed = false;
-    bool vertices_readed = false;
-    bool faces_readed = false;
-    bool numtverts_readed = false;
-    bool tverts_readed = false;
-    bool tfaces_readed = false;
+    vsg::vec3 pos;
+    vsg::vec3 normal;
+    vsg::vec2 tex_coord;
+};
 
-    std::vector<Mesh> meshes;
-    Mesh* current_mesh = nullptr;
+static bool equal(float a, float b)
+{
+    return std::fabs(a - b) < 0.000001;
+}
 
-    vsg::ref_ptr<vsg::vec3Array>   temp_vertices;
-    vsg::ref_ptr<vsg::ushortArray> temp_indices;
-
-    std::size_t vertices_count = 0;
-    std::size_t faces_count = 0;
-    std::size_t indices_count = 0;
-    std::size_t temp_vertices_count = 0;
-
-    std::ifstream file(model_file.string());
-    std::string line;
-
-    while (std::getline(file, line))
-    {
-        remove_carriage_return_symbols(line);
-
-        if (line == "New object" && !object_added)
-        {
-            current_mesh = &(meshes.emplace_back(Mesh()));
-
-            temp_vertices.reset();
-            temp_indices.reset();
-            vertices_count = 0;
-            faces_count = 0;
-            indices_count = 0;
-            temp_vertices_count = 0;
-
-            object_added = true;
-        }
-        else if (line == "numverts numfaces" && !numverts_readed)
-        {
-            file >> temp_vertices_count >> faces_count;
-            indices_count = faces_count * 3;
-
-            temp_vertices = vsg::vec3Array::create(temp_vertices_count);
-            temp_indices = vsg::ushortArray::create(indices_count);
-
-            numverts_readed = true;
-        }
-        else if (line == "Mesh vertices:" && !vertices_readed)
-        {
-            for (auto& tempVertex : *temp_vertices)
-            {
-                file >> tempVertex;
-            }
-
-            vertices_readed = true;
-        }
-        else if (line == "Mesh faces:" && !faces_readed)
-        {
-            for (auto& tempIndex : *temp_indices)
-            {
-                file >> tempIndex;
-                --tempIndex;
-            }
-
-            faces_readed = true;
-        }
-        else if ((line == "numtverts numtvfaces" || line == "numtverts numtfaces") && !numtverts_readed)
-        {
-            file >> vertices_count >> faces_count;
-
-            current_mesh->vertices = vsg::vec3Array::create(vertices_count);
-            current_mesh->normals = vsg::vec3Array::create(vertices_count);
-            current_mesh->tex_coords = vsg::vec2Array::create(vertices_count);
-            current_mesh->colors = vsg::vec4Array::create(vertices_count);
-            current_mesh->indices = vsg::ushortArray::create(indices_count);
-
-            for (auto& color : *current_mesh->colors)
-            {
-                color.set(1.0f, 1.0f, 1.0f, 1.0f);
-            }
-
-            numtverts_readed = true;
-        }
-        else if (line == "Texture vertices:" && !tverts_readed)
-        {
-            for (auto& texCoord : *current_mesh->tex_coords)
-            {
-                file >> texCoord;
-                float trash;
-                file >> trash;
-            }
-
-            tverts_readed = true;
-        }
-        else if (line == "Texture faces:" && !tfaces_readed)
-        {
-            std::set<std::size_t> processed_indices;
-            for (std::size_t i = 0; i < indices_count; ++i)
-            {
-                auto& index = current_mesh->indices->at(i);
-                file >> index;
-                --index;
-
-                // Если вершина с заданным индексом еще не была обработана,
-                // привязать координаты этой вершины
-                // к текстурным координатам
-                if (processed_indices.find(index) == processed_indices.end())
-                {
-                    std::size_t temp_index = temp_indices->at(i);
-                    current_mesh->vertices->at(index) = temp_vertices->at(temp_index);
-                    processed_indices.insert(index);
-                }
-            }
-
-            for (std::size_t i = 0; i < faces_count; ++i)
-            {
-                std::size_t index1 = current_mesh->indices->at(i * 3);
-                std::size_t index2 = current_mesh->indices->at(i * 3 + 1);
-                std::size_t index3 = current_mesh->indices->at(i * 3 + 2);
-
-                vsg::vec3& vertex1 = current_mesh->vertices->at(index1);
-                vsg::vec3& vertex2 = current_mesh->vertices->at(index2);
-                vsg::vec3& vertex3 = current_mesh->vertices->at(index3);
-
-                vsg::vec3& vertex_normal1 = current_mesh->normals->at(index1);
-                vsg::vec3& vertex_normal2 = current_mesh->normals->at(index2);
-                vsg::vec3& vertex_normal3 = current_mesh->normals->at(index3);
-
-                vsg::vec3 face_normal = vsg::cross(vertex2 - vertex1,
-                                                   vertex3 - vertex1);
-
-                // Добавить к каждой нормали вершины нормаль поверхности,
-                // на которой она лежит
-                vertex_normal1 += face_normal;
-                vertex_normal2 += face_normal;
-                vertex_normal3 += face_normal;
-            }
-
-            tfaces_readed = true;
-        }
-    }
-
-    if (!object_added || !numverts_readed || !vertices_readed || !faces_readed
-        || !numtverts_readed || !tverts_readed || !tfaces_readed)
+vsg::ref_ptr<ModelData> DMD_Reader::load_model(const vsg::Path& path) const
+{
+    std::ifstream inf(path);
+    if (!inf)
     {
         return {};
     }
 
-    temp_vertices.reset();
-    temp_indices.reset();
-
-    std::size_t model_vertices_count = 0;
-    std::size_t model_indices_count = 0;
-
-    for (auto& mesh : meshes)
+    std::string buf;
+    while (buf != "TriMesh()")
     {
-        model_vertices_count += mesh.vertices->size();
-        model_indices_count += mesh.indices->size();
+        inf >> buf;
+    }
+
+    inf >> buf >> buf;
+
+    std::uint32_t temp_vertex_count, temp_face_count;
+    inf >> temp_vertex_count >> temp_face_count;
+
+    inf >> buf >> buf;
+
+    std::vector<vsg::vec3> temp_vertices(temp_vertex_count);
+    for (vsg::vec3& vertex : temp_vertices)
+    {
+        inf >> buf;
+        if (buf.find('#') != std::string::npos)
+        {
+            return {};
+        }
+        vertex.x = std::stof(buf);
+
+        inf >> buf;
+        if (buf.find('#') != std::string::npos)
+        {
+            return {};
+        }
+        vertex.y = std::stof(buf);
+
+        inf >> buf;
+        if (buf.find('#') != std::string::npos)
+        {
+            return {};
+        }
+        vertex.z = std::stof(buf);
+    }
+
+    inf >> buf >> buf >> buf >> buf;
+
+    std::vector<std::uint32_t> temp_vertex_indices(temp_face_count * 3);
+    for (std::uint32_t& index : temp_vertex_indices)
+    {
+        inf >> index;
+        --index;
+    }
+
+    while (buf != "Texture:")
+    {
+        inf >> buf;
+    }
+
+    inf >> buf >> buf;
+
+    std::uint32_t temp_tex_coord_count;
+    inf >> temp_tex_coord_count >> temp_face_count;
+
+    inf >> buf >> buf;
+
+    std::vector<vsg::vec2> temp_tex_coords(temp_tex_coord_count);
+    for (vsg::vec2& tex_coord : temp_tex_coords)
+    {
+        inf >> tex_coord.x >> tex_coord.y >> buf;
+    }
+
+    inf >> buf >> buf >> buf >> buf >> buf;
+
+    std::vector<std::uint32_t> temp_tex_coord_indices(temp_face_count * 3);
+    for (std::uint32_t& index : temp_tex_coord_indices)
+    {
+        inf >> index;
+        --index;
+    }
+
+    std::vector<vertex_t> vertices(temp_face_count * 3);
+    for (std::uint32_t i = 0; i < temp_face_count * 3; ++i)
+    {
+        vertices[i].pos = temp_vertices[temp_vertex_indices[i]];
+        vertices[i].tex_coord = temp_tex_coords[temp_tex_coord_indices[i]];
+    }
+
+    temp_tex_coord_indices.clear();
+    temp_tex_coords.clear();
+    temp_vertex_indices.clear();
+    temp_vertices.clear();
+
+    std::vector<std::uint32_t> indices(temp_face_count * 3);
+    for (std::uint32_t i = 0; i < temp_face_count * 3; ++i)
+    {
+        indices[i] = i;
+    }
+
+    for (std::uint32_t i = 0; i < indices.size(); i += 3)
+    {
+        std::uint32_t index_1 = indices[i];
+        std::uint32_t index_2 = indices[i + 1];
+        std::uint32_t index_3 = indices[i + 2];
+
+        const vsg::vec3& pos_1 = vertices[index_1].pos;
+        const vsg::vec3& pos_2 = vertices[index_2].pos;
+        const vsg::vec3& pos_3 = vertices[index_3].pos;
+
+        vsg::vec3& normal_1 = vertices[index_1].normal;
+        vsg::vec3& normal_2 = vertices[index_2].normal;
+        vsg::vec3& normal_3 = vertices[index_3].normal;
+
+        vsg::vec3 face_normal = vsg::cross(pos_2 - pos_1, pos_3 - pos_1);
+
+        normal_1 += face_normal;
+        normal_2 += face_normal;
+        normal_3 += face_normal;
+    }
+
+    for (vertex_t& vertex : vertices)
+    {
+        vertex.normal = vsg::normalize(vertex.normal);
+    }
+
+    for (std::uint32_t i = 0; i < vertices.size(); ++i)
+    {
+        const vertex_t& vertex_1 = vertices[i];
+        for (std::uint32_t j = i + 1; j < vertices.size(); ++j)
+        {
+            const vertex_t& vertex_2 = vertices[j];
+            if (equal(vertex_1.pos.x, vertex_2.pos.x)
+                && equal(vertex_1.pos.y, vertex_2.pos.y)
+                && equal(vertex_1.pos.z, vertex_2.pos.z)
+                && equal(vertex_1.normal.x, vertex_2.normal.x)
+                && equal(vertex_1.normal.y, vertex_2.normal.y)
+                && equal(vertex_1.normal.z, vertex_2.normal.z)
+                && equal(vertex_1.tex_coord.x, vertex_2.tex_coord.x)
+                && equal(vertex_1.tex_coord.y, vertex_2.tex_coord.y))
+            {
+                for (std::uint32_t& index : indices)
+                {
+                    if (index == j)
+                    {
+                        index = i;
+                    }
+                    else if (index > j)
+                    {
+                        --index;
+                    }
+                }
+
+                vertices.erase(vertices.begin() + j);
+
+                --j;
+            }
+        }
+    }
+
+    for (std::uint32_t i = 0; i < indices.size(); i += 3)
+    {
+        std::uint32_t index_1 = indices[i];
+        std::uint32_t index_2 = indices[i + 1];
+        std::uint32_t index_3 = indices[i + 2];
+
+        if (index_1 == index_2 || index_1 == index_3 || index_2 == index_3)
+        {
+            for (std::uint32_t j = 0; j < 3; ++j)
+            {
+                indices.erase(indices.begin() + i);
+            }
+            i -= 3;
+        }
+        else
+        {
+            for (std::uint32_t j = i + 3; j < indices.size(); j += 3)
+            {
+                std::uint32_t index_4 = indices[j];
+                std::uint32_t index_5 = indices[j + 1];
+                std::uint32_t index_6 = indices[j + 2];
+
+                if (index_1 == index_4 && index_2 == index_5 && index_3 == index_6)
+                {
+                    for (std::uint32_t k = 0; k < 3; ++k)
+                    {
+                        indices.erase(indices.begin() + j);
+                    }
+                }
+            }
+        }
     }
 
     auto model_data = ModelData::create();
-    model_data->vertices = vsg::vec3Array::create(model_vertices_count);
-    model_data->normals = vsg::vec3Array::create(model_vertices_count);
-    model_data->tex_coords = vsg::vec2Array::create(model_vertices_count);
-    model_data->colors = vsg::vec4Array::create(model_vertices_count);
-    model_data->indices = vsg::ushortArray::create(model_indices_count);
+    model_data->vertices = vsg::vec3Array::create(vertices.size());
+    model_data->normals = vsg::vec3Array::create(vertices.size());
+    model_data->tex_coords = vsg::vec2Array::create(vertices.size());
+    model_data->colors = vsg::vec4Array::create(vertices.size());
+    model_data->indices = vsg::ushortArray::create(indices.size());
 
-    model_vertices_count = 0;
-    model_indices_count = 0;
-
-    for (auto& mesh : meshes)
+    for (std::uint32_t i = 0; i < vertices.size(); ++i)
     {
-        std::size_t mesh_vertices_count = mesh.vertices->size();
-        for (std::size_t i = 0; i < mesh_vertices_count; ++i)
-        {
-            model_data->vertices->at(i + model_vertices_count) = mesh.vertices->at(i);
-            model_data->normals->at(i + model_vertices_count) = mesh.normals->at(i);
-            model_data->tex_coords->at(i + model_vertices_count) = mesh.tex_coords->at(i);
-            model_data->colors->at(i + model_vertices_count) = mesh.colors->at(i);
-        }
-
-        std::size_t mesh_indices_count = mesh.indices->size();
-        for (std::size_t i = 0; i < mesh_indices_count; ++i)
-        {
-            model_data->indices->at(i + model_indices_count) = mesh.indices->at(i);
-        }
-
-        model_vertices_count += mesh_vertices_count;
-        model_indices_count += mesh_indices_count;
+        model_data->vertices->at(i).set(vertices[i].pos.x, vertices[i].pos.y, vertices[i].pos.z);
+        model_data->normals->at(i).set(vertices[i].normal.x, vertices[i].normal.y, vertices[i].normal.z);
+        model_data->tex_coords->at(i).set(vertices[i].tex_coord.x, vertices[i].tex_coord.y);
+        model_data->colors->at(i).set(1.0f, 1.0f, 1.0f, 1.0f);
     }
 
-    meshes.clear();
+    for (std::uint32_t i = 0; i < indices.size(); ++i)
+    {
+        model_data->indices->at(i) = indices.at(i);
+    }
 
     return model_data;
 }
